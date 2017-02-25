@@ -1,0 +1,9 @@
+[Unit]
+Description=Updates CentOS and EPEL yum repositories every 6 hours.
+
+[Timer]
+OnCalendar=3/6:15
+Persistent=1
+
+[Install]
+WantedBy=multi-user.target

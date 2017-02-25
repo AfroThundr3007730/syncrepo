@@ -1,0 +1,3 @@
+Below are configuration files for creating upstream and downstream yum and apt repositories.
+These can be hosted on a CentOS, Debian, or Ubuntu system and served via rsync or http.
+The only requirements are rsync and a webserver, such as apache, and also debmirror.

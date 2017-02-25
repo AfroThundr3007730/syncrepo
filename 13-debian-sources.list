@@ -1,0 +1,12 @@
+# Debian apt sources.list
+# Replace $(version) with your actual release
+
+deb http://apt.lab.local/repos/debian/ $(version) main contrib non-free
+
+deb http://apt.lab.local/repos/debian/ $(version)-updates main contrib non-free
+
+deb http://apt.lab.local/repos/debian/ $(version)-backports main contrib non-free
+
+deb http://apt.lab.local/repos/debian/ $(version)-proposed-updates main contrib non-free
+
+deb http://apt.lab.local/repos/debian-security/ $(version)/updates main contrib non-free

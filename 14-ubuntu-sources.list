@@ -1,0 +1,12 @@
+# Ubuntu apt sources.list
+# Replace $(version) with your actual release
+
+deb http://apt.lab.local/repos/ubuntu/ $(version) main restricted universe multiverse
+
+deb http://apt.lab.local/repos/ubuntu/ $(version)-updatees main restricted universe multiverse
+
+deb http://apt.lab.local/repos/ubuntu/ $(version)-backports main restricted universe multiverse
+
+deb http://apt.lab.local/repos/ubuntu/ $(version)-proposed main restricted universe multiverse
+
+deb http://apt.lab.local/repos/ubuntu/ $(version)-security main restricted universe multiverse
