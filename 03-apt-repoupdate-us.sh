@@ -1,7 +1,7 @@
 #!/bin/bash
 # Apt repository updater script for Ubuntu, or really, anything reachable via rsync.
 # Currently syncs Ubuntu Trusty and Xenial, as well as Debian Wheezy and Jessie.
-# Version 1.2 updated 20170224 by <ejcarsw>
+# Version 1.2 updated 20170224 by <AfroThundr>
 
 # Declare some variables (modify as necessary)
 arch=amd64
