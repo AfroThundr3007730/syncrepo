@@ -1,7 +1,7 @@
 #!/bin/bash
 # Yum repository updater script for CentOS, or really, anything reachable via rsync.
 # Currently syncs CentOS 6 and 7, as well as EPEL 6 and 7.
-# Version 1.2 updated 20170224 by <AfroThundr>
+# Version 1.3 updated 20180502 by <AfroThundr>
 
 # Declare some variables (modify as necessary)
 arch=x86_64
@@ -17,13 +17,13 @@ progfile=/var/log/yum_rsync_prog.log
 
 # Declare some more vars (don't break these)
 centoslist=$(rsync $centoshost | awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}')
-centoswget=$(wget -qO- $mirror/centos/dir_sizes | awk '/G/ && /[0-9]+\.[0-9.]+$/ {print $2}')
+#centoswget=$(wget -qO- $mirror/centos/dir_sizes | awk '/G/ && /[0-9]+\.[0-9.]+$/ {print $2}')
 epellist=$(rsync $epelhost | awk '/^d/ && /[0-9]$/ {print $5}')
 centossync=$(eval echo --include={$(echo $centoslist | tr ' ' ',')})
 epelsync=$(eval echo --include={$(echo $epellist | tr ' ' ',')})
 release=$(echo $centoswget | tr ' ' '\n' | tail -1)
 majorver=${release%%.*}
-oldrelease=$(echo $centoswget | tr ' ' '\n' | tail -2 | head -1)
+oldrelease=$(echo $centoslist | tr ' ' '\n' | tail -2 | head -1)
 oldmajorver=${oldrelease%%.*}
 prevrelease=$(ls $centosrepo | awk "/^$majorver\./" | tail -2 | head -1)
 oldprevrelease=$(ls $centosrepo | awk "/^$oldmajorver\./" | tail -2 | head -1)
@@ -64,7 +64,7 @@ else
     # Create lockfile, sync older centos repo, delete lockfile
     printf "$(date): Beginning rsync of Legacy CentOS $oldrelease repo from $centoshost.\n" | $teelog
     touch $lockfile
-    $rsync $centosexclude $centoshost/$oldrelease/ $centosrepo/$oldrelease/ | $teelog
+    $rsync $centosexclude $centoshost/$oldrelease/ $centosrepo/$oldrelease/
     rm -f $lockfile
     printf "$(date): Done.\n\n" | $teelog
 
@@ -78,7 +78,7 @@ else
     # Create lockfile, sync centos repo, delete lockfile
     printf "$(date): Beginning rsync of CentOS $release repo from $centoshost.\n" | $teelog
     touch $lockfile
-    $rsync $centosexclude $centoshost/$release/ $centosrepo/$release/ | $teelog
+    $rsync $centosexclude $centoshost/$release/ $centosrepo/$release/
     rm -f $lockfile
     printf "$(date): Done.\n\n" | $teelog
 
@@ -92,10 +92,24 @@ else
     # Create lockfile, sync older epel repo, delete lockfile
     printf "$(date): Beginning rsync of Legacy EPEL $oldmajorver repo from $epelhost.\n" | $teelog
     touch $lockfile
-    $rsync $epelexclude $epelhost/$oldmajorver/ $epelrepo/$oldmajorver/ | $teelog
+    $rsync $epelexclude $epelhost/$oldmajorver/ $epelrepo/$oldmajorver/
     rm -f $lockfile
     printf "$(date): Done.\n\n" | $teelog
 
+    # Check for older epel-testing release directory
+    if [ ! -d $epelrepo/testing/$oldmajorver ]; then
+        # Make directory if it doesn't exist
+        printf "$(date): Directory for EPEL $oldmajorver Testing doesn't exist. Creating..\n" | $teelog
+        mkdir $epelrepo/testing/$oldmajorver
+    fi
+
+    # Create lockfile, sync older epel-testing repo, delete lockfile
+    printf "$(date): Beginning rsync of Legacy EPEL $oldmajorver Testing repo from $epelhost.\n" | $teelog
+    touch $lockfile
+    $rsync $epelexclude $epelhost/testing/$oldmajorver/ $epelrepo/testing/$oldmajorver/
+    rm -f $lockfile
+    printf "$(date): Done.\n\n" | $teelog
+    
     # Check for epel release directory
     if [ ! -d $epelrepo/$majorver ]; then
         # Make directory if it doesn't exist
@@ -106,7 +120,21 @@ else
     # Create lockfile, sync epel repo, delete lockfile
     printf "$(date): Beginning rsync of EPEL $majorver repo from $epelhost.\n" | $teelog
     touch $lockfile
-    $rsync $epelexclude $epelhost/$majorver/ $epelrepo/$majorver/ | $teelog
+    $rsync $epelexclude $epelhost/$majorver/ $epelrepo/$majorver/
+    rm -f $lockfile
+    printf "$(date): Done.\n\n" | $teelog
+
+    # Check for epel-testing release directory
+    if [ ! -d $epelrepo/testing/$majorver ]; then
+        # Make directory if it doesn't exist
+        printf "$(date): Directory for EPEL $majorver Testing doesn't exist. Creating..\n" | $teelog
+        mkdir $epelrepo/testing/$majorver
+    fi
+
+    # Create lockfile, sync epel-testing repo, delete lockfile
+    printf "$(date): Beginning rsync of EPEL $majorver Testing repo from $epelhost.\n" | $teelog
+    touch $lockfile
+    $rsync $epelexclude $epelhost/testing/$majorver/ $epelrepo/testing/$majorver/
     rm -f $lockfile
     printf "$(date): Done.\n\n" | $teelog
 
@@ -116,7 +144,7 @@ else
         # Create lockfile, sync older previous centos repo, delete lockfile
         printf "$(date): Beginning rsync of CentOS $oldprevrelease repo from $centoshost.\n" | $teelog
         touch $lockfile
-        $rsync $centosexclude $centoshost/$oldprevrelease/ $centosrepo/$oldprevrelease/ | $teelog
+        $rsync $centosexclude $centoshost/$oldprevrelease/ $centosrepo/$oldprevrelease/
         rm -f $lockfile
         printf "$(date): Done.\n\n" | $teelog
     fi
@@ -126,7 +154,7 @@ else
         # Create lockfile, sync previous centos repo, delete lockfile
         printf "$(date): Beginning rsync of CentOS $prevrelease repo from $centoshost.\n" | $teelog
         touch $lockfile
-        $rsync $centosexclude $centoshost/$prevrelease/ $centosrepo/$prevrelease/ | $teelog
+        $rsync $centosexclude $centoshost/$prevrelease/ $centosrepo/$prevrelease/
         rm -f $lockfile
         printf "$(date): Done.\n\n" | $teelog
     fi

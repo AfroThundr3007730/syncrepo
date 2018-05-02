@@ -35,3 +35,10 @@ baseurl=http://yum.dmz.local/repos/epel/$releasever/$basearch
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
+
+[epel-testing]
+name=Extra Packages for Enterprise Linux 7
+baseurl=http://yum.dmz.local/repos/epel/testing/$releasever/$basearch
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7

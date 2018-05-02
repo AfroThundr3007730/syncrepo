@@ -1,7 +1,7 @@
 #!/bin/bash
 # Yum repository updater script for CentOS, or really, anything reachable via rsync.
 # Currently syncs CentOS 6 and 7, as well as EPEL 6 and 7.
-# Version 1.2 updated 20170224 by <AfroThundr>
+# Version 1.2 updated 20180502 by <AfroThundr>
 
 # Declare some variables (modify as necessary)
 arch=x86_64
