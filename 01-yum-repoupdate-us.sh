@@ -1,7 +1,7 @@
 #!/bin/bash
 # Yum repository updater script for CentOS, or really, anything reachable via rsync.
 # Currently syncs CentOS 6 and 7, as well as EPEL 6 and 7.
-# Version 1.3 updated 20180502 by <AfroThundr>
+# Version 1.3 updated 20180503 by <AfroThundr>
 
 # Declare some variables (modify as necessary)
 arch=x86_64
@@ -17,16 +17,15 @@ progfile=/var/log/yum_rsync_prog.log
 
 # Declare some more vars (don't break these)
 centoslist=$(rsync $centoshost | awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}')
-#centoswget=$(wget -qO- $mirror/centos/dir_sizes | awk '/G/ && /[0-9]+\.[0-9.]+$/ {print $2}')
 epellist=$(rsync $epelhost | awk '/^d/ && /[0-9]$/ {print $5}')
 centossync=$(eval echo --include={$(echo $centoslist | tr ' ' ',')})
 epelsync=$(eval echo --include={$(echo $epellist | tr ' ' ',')})
-release=$(echo $centoswget | tr ' ' '\n' | tail -1)
+release=$(echo $centoslist | tr ' ' '\n' | tail -1)
 majorver=${release%%.*}
-oldrelease=$(echo $centoslist | tr ' ' '\n' | tail -2 | head -1)
-oldmajorver=${oldrelease%%.*}
-prevrelease=$(ls $centosrepo | awk "/^$majorver\./" | tail -2 | head -1)
-oldprevrelease=$(ls $centosrepo | awk "/^$oldmajorver\./" | tail -2 | head -1)
+oldmajorver=$((majorver-1))
+oldrelease=$(echo $centoslist | tr ' ' '\n' | awk "/^$oldmajorver\./" | tail -1)
+prevrelease=$(echo $centoslist | tr ' ' '\n' | awk "/^$majorver\./" | tail -2 | head -1)
+oldprevrelease=$(echo $centoslist | tr ' ' '\n' | awk "/^$oldmajorver\./" | tail -2 | head -1)
 
 # Build the commands, with more variables
 centosexclude=$(echo --include={os,extras,updates,centosplus,readme} --exclude=i386 --exclude="/*")
@@ -141,6 +140,14 @@ else
     # We ain't out of the woods yet, continue to sync previous point release til its empty
     # Check for older previous centos point release placeholder
     if [ ! -f $centosrepo/$oldprevrelease/readme ]; then
+
+        # Check for older previous centos release directory
+        if [ ! -d $centosrepo/$oldprevrelease ]; then
+            # Make directory if it doesn't exist
+            printf "$(date): Directory for CentOS $oldprevrelease doesn't exist. Creating..\n" | $teelog
+            cd $centosrepo; mkdir $oldprevrelease
+        fi
+
         # Create lockfile, sync older previous centos repo, delete lockfile
         printf "$(date): Beginning rsync of CentOS $oldprevrelease repo from $centoshost.\n" | $teelog
         touch $lockfile
@@ -151,6 +158,14 @@ else
 
     # Check for previous centos point release placeholder
     if [ ! -f $centosrepo/$prevrelease/readme ]; then
+
+        # Check for previous centos release directory
+        if [ ! -d $centosrepo/$prevrelease ]; then
+            # Make directory if it doesn't exist
+            printf "$(date): Directory for CentOS $prevrelease doesn't exist. Creating..\n" | $teelog
+            cd $centosrepo; mkdir $prevrelease
+        fi
+
         # Create lockfile, sync previous centos repo, delete lockfile
         printf "$(date): Beginning rsync of CentOS $prevrelease repo from $centoshost.\n" | $teelog
         touch $lockfile
