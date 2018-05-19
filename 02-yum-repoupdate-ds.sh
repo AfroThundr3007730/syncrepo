@@ -1,10 +1,9 @@
 #!/bin/bash
-# Yum repository updater script for CentOS, or really, anything reachable via rsync.
-# Currently syncs CentOS 6 and 7, as well as EPEL 6 and 7.
-# Version 1.2 updated 20180502 by <AfroThundr>
+# Yum repository updater script for CentOS (downstream)
+# Currently syncs CentOS, EPEL, and EPEL Testing
+# Version 1.4 updated 20180519 by <AfroThundr>
 
 # Declare some variables (modify as necessary)
-arch=x86_64
 repodir=/srv/repository
 centosrepo=$repodir/centos
 epelrepo=$repodir/epel
@@ -20,43 +19,44 @@ rsync="rsync -ahmzHS --stats --no-motd --del --delete-excluded --log-file=$progf
 teelog="tee -a $logfile $progfile"
 
 # Here we go...
-printf "$(date): Started synchronization of CentOS and EPEL repositories.\n" | $teelog
-printf "$(date): Use tail -f $progfile to view progress.\n\n"
+printf '%s: Started synchronization of CentOS and EPEL repositories.\n' "$(date)" | $teelog
+printf '%s: Use tail -f %s to view progress.\n\n' "$(date)" "$progfile"
 
 # Check if the rsync script is already running
 if [ -f $lockfile ]; then
-    printf "$(date): Error: Repository updates are already running.\n\n" | $teelog
+    printf '%s: Error: Repository updates are already running.\n\n' "$(date)" | $teelog
     exit 10
 
 # Check that we can reach the public mirror
 elif ! ping -c 5 $mirror &> /dev/null; then
-    printf "$(date): Error: Cannot reach the $mirror mirror server.\n\n" | $teelog
+    printf '%s: Error: Cannot reach the %s mirror server.\n\n' "$(date)" "$mirror" | $teelog
     exit 20
 
 # Check that the repository is mounted
 elif ! mount | grep $repodir &> /dev/null; then
-    printf "$(date): Error: Directory $repodir is not mounted.\n\n" | $teelog
+    printf '%s: Error: Directory %s is not mounted.\n\n' "$(date)" "$repodir" | $teelog
     exit 30
+
 else
 
     # Just sync everything since we're downstream
 
     # Create lockfile, sync centos repo, delete lockfile
-    printf "$(date): Beginning rsync of CentOS repo from $centoshost.\n" | $teelog
+    printf '%s: Beginning rsync of CentOS repo from %s.\n' "$(date)" "$centoshost" | $teelog
     touch $lockfile
-    $rsync $centoshost/ $centosrepo/ | $teelog
+    $rsync "$centoshost/" "$centosrepo/"
     rm -f $lockfile
-    printf "$(date): Done.\n\n" | $teelog
+    printf '%s: Done.\n\n' "$(date)" | $teelog
 
     # Create lockfile, sync epel repo, delete lockfile
-    printf "$(date): Beginning rsync of EPEL repo from $epelhost.\n" | $teelog
+    printf '%s: Beginning rsync of EPEL repo from %s.\n' "$(date)" "$epelhost" | $teelog
     touch $lockfile
-    $rsync $epelhost/ $epelrepo/ | $teelog
+    $rsync "$epelhost/" "$epelrepo/"
     rm -f $lockfile
-    printf "$(date): Done.\n\n" | $teelog
+    printf '%s: Done.\n\n' "$(date)" | $teelog
 
 fi
 
 # Now we're done
-printf "$(date): Completed synchronization of CentOS and EPEL repositories.\n\n" | $teelog
+printf '%s: Completed synchronization of CentOS and EPEL repositories.\n\n' "$(date)" | $teelog
 exit 0

@@ -1,21 +1,17 @@
 #!/bin/bash
-# Apt repository updater script for Ubuntu, or really, anything reachable via rsync.
-# Currently syncs Ubuntu Trusty and Xenial, as well as Debian Wheezy and Jessie.
-# Version 1.2 updated 20170224 by <AfroThundr>
+# Apt repository updater script for Ubuntu (downstream)
+# Currently syncs Ubuntu, Debian, and Debian Security
+# Version 1.4 updated 20170519 by <AfroThundr>
 
 # Declare some variables (modify as necessary)
-arch=amd64
-upath=ubuntu
-dpath=debian
-spath=debian-security
 repodir=/srv/repository
-ubunturepo=$repodir/$upath
-debianrepo=$repodir/$dpath
-debsecrepo=$repodir/$spath
+ubunturepo=$repodir/ubuntu
+debianrepo=$repodir/debian
+debsecrepo=$repodir/debian-security
 mirror=apt.dmz.lab.local
-ubuntuhost=$mirror::$upath
-debianhost=$mirror::$dpath
-debsechost=$mirror::$spath
+ubuntuhost=$mirror::ubuntu
+debianhost=$mirror::debian
+debsechost=$mirror::debian-security
 lockfile=/var/lock/subsys/yum_rsync
 logfile=/var/log/yum_rsync.log
 progfile=/var/log/yum_rsync_prog.log
@@ -25,50 +21,50 @@ rsync="rsync -ahmzHS --stats --no-motd --del --delete-excluded --log-file=$progf
 teelog="tee -a $logfile $progfile"
 
 # Here we go...
-printf "$(date): Started synchronization of Ubuntu and Debian repositories.\n" | $teelog
-printf "$(date): Use tail -f $progfile to view progress.\n\n"
+printf '%s: Started synchronization of Ubuntu and Debian repositories.\n' "$(date)" | $teelog
+printf '%s: Use tail -f %s to view progress.\n\n' "$(date)" "$progfile"
 
 # Check if the rsync script is already running
 if [ -f $lockfile ]; then
-    printf "$(date): Error: Repository updates are already running.\n\n" | $teelog
+    printf '%s: Error: Repository updates are already running.\n\n' "$(date)" | $teelog
     exit 10
 
 # Check that we can reach the public mirror
 elif ! ping -c 5 $mirror &> /dev/null; then
-    printf "$(date): Error: Cannot reach the $mirror mirror server.\n\n" | $teelog
+    printf '%s: Error: Cannot reach the %s mirror server.\n\n' "$(date)" "$mirror" | $teelog
     exit 20
 
 # Check that the repository is mounted
 elif ! mount | grep $repodir &> /dev/null; then
-    printf "$(date): Error: Directory $repodir is not mounted.\n\n" | $teelog
+    printf '%s: Error: Directory %s is not mounted.\n\n' "$(date)" "$repodir" | $teelog
     exit 30
 else
 
     # Just sync everything since we're downstream
 
     # Create lockfile, sync ubuntu repo, delete lockfile
-    printf "$(date): Beginning rsync of Ubuntu repo from $centoshost.\n" | $teelog
+    printf '%s: Beginning rsync of Ubuntu repo from %s.\n' "$(date)" "$ubuntuhost" | $teelog
     touch $lockfile
-    $rsync $ubuntuhost/ $ubunturepo/ | $teelog
+    $rsync "$ubuntuhost/" "$ubunturepo/"
     rm -f $lockfile
-    printf "$(date): Done.\n\n" | $teelog
+    printf '%s: Done.\n\n' "$(date)" | $teelog
 
     # Create lockfile, sync debian repo, delete lockfile
-    printf "$(date): Beginning rsync of Debian repo from $epelhost.\n" | $teelog
+    printf '%s: Beginning rsync of Debian repo from %s.\n' "$(date)" "$debianhost" | $teelog
     touch $lockfile
-    $rsync $debianhost/ $debianrepo/ | $teelog
+    $rsync "$debianhost/" "$debianrepo/"
     rm -f $lockfile
-    printf "$(date): Done.\n\n" | $teelog
+    printf '%s: Done.\n\n' "$(date)" | $teelog
 
     # Create lockfile, sync debian security repo, delete lockfile
-    printf "$(date): Beginning rsync of Debian Security repo from $epelhost.\n" | $teelog
+    printf '%s: Beginning rsync of Debian Security repo from %s.\n' "$(date)" "$debsechost" | $teelog
     touch $lockfile
-    $rsync $debsechost/ $debsecrepo/ | $teelog
+    $rsync "$debsechost/" "$debsecrepo/"
     rm -f $lockfile
-    printf "$(date): Done.\n\n" | $teelog
+    printf '%s: Done.\n\n' "$(date)" | $teelog
 
 fi
 
 # Now we're done
-printf "$(date): Completed synchronization of Ubuntu and Debian repositories.\n\n" | $teelog
+printf '%s: Completed synchronization of Ubuntu and Debian repositories.\n\n' "$(date)" | $teelog
 exit 0
