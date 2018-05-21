@@ -1,7 +1,16 @@
 #!/bin/bash
 # Apt repository updater script for Ubuntu (upstream)
 # Currently syncs Ubuntu, Debian, and Debian Security
-# Version 1.4 updated 20170519 by <AfroThundr>
+# Version 1.4 updated 20180521 by <AfroThundr>
+
+# Version handler
+for i in "$@"; do
+    if [ "$i" = "-v" ]; then
+        v=$(head -4 "$0" | tail -1)
+        printf '%s\n' "$v"
+        exit 0
+    fi
+done
 
 # Declare some variables (modify as necessary)
 arch=amd64
