@@ -36,7 +36,7 @@ oldprevrelease=$(echo "$centoslist" | tr ' ' '\n' | awk "/^$oldmajorver\\./" | t
 # Build the commands, with more variables
 centosexclude=$(echo --include={os,extras,updates,centosplus,readme} --exclude=i386 --exclude="/*")
 epelexclude=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$arch/debug})
-rsync="rsync -ahmzHS --stats --no-motd --del --delete-excluded --log-file=$progfile"
+rsync="rsync -hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$progfile"
 teelog="tee -a $logfile $progfile"
 
 # Here we go...

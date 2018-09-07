@@ -5,3 +5,5 @@ Description=Updates CentOS and EPEL yum repositories.
 Type=simple
 ExecStart=/usr/local/sbin/repoupdate
 StandardOutput=syslog
+User=root
+Group=www-data

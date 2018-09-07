@@ -26,7 +26,7 @@ logfile=/var/log/yum_rsync.log
 progfile=/var/log/yum_rsync_prog.log
 
 # Build the commands, with more variables
-rsync="rsync -ahmzHS --stats --no-motd --del --delete-excluded --log-file=$progfile"
+rsync="rsync -hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$progfile"
 teelog="tee -a $logfile $progfile"
 
 # Here we go...
