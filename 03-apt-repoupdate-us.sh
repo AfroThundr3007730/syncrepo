@@ -1,7 +1,7 @@
 #!/bin/bash
 # Apt repository updater script for Ubuntu (upstream)
 # Currently syncs Ubuntu, Debian, and Debian Security
-# Version 1.4 updated 20180521 by <AfroThundr>
+# Version 1.4.2 updated 20181003 by <AfroThundr>
 
 # Version handler
 for i in "$@"; do
@@ -46,6 +46,7 @@ dmirror2="debmirror -a $arch --no-source --ignore-small-errors --method=http --c
 teelog="tee -a $logfile $progfile"
 
 # Here we go...
+printf '%s: Progress log reset.\n' "$(date -u +%FT%TZ)" > $progfile
 printf '%s: Started synchronization of Ubuntu and Debian repositories.\n' "$(date -u +%FT%TZ)" | $teelog
 printf '%s: Use tail -f %s to view progress.\n\n' "$(date -u +%FT%TZ)" "$progfile"
 

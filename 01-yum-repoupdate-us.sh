@@ -1,7 +1,7 @@
 #!/bin/bash
 # Yum repository updater script for CentOS (upstream)
 # Currently syncs CentOS, EPEL, and EPEL Testing
-# Version 1.4 updated 20180521 by <AfroThundr>
+# Version 1.4.2 updated 20181003 by <AfroThundr>
 
 # Version handler
 for i in "$@"; do
@@ -40,6 +40,7 @@ rsync="rsync -hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$p
 teelog="tee -a $logfile $progfile"
 
 # Here we go...
+printf '%s: Progress log reset.\n' "$(date -u +%FT%TZ)" > $progfile
 printf '%s: Started synchronization of CentOS and EPEL repositories.\n' "$(date -u +%FT%TZ)" | $teelog
 printf '%s: Use tail -f %s to view progress.\n\n' "$(date -u +%FT%TZ)" "$progfile"
 
@@ -64,7 +65,7 @@ else
     if [ ! -d "$centosrepo/$oldrelease" ]; then
         # Make directory if it doesn't exist
         printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldrelease" | $teelog
-        cd "$centosrepo" || exit 40; mkdir "$oldrelease"; rm -f "$oldmajorver"; ln -s "$oldrelease" "$oldmajorver"
+        cd "$centosrepo" || exit 40; mkdir -p "$oldrelease"; rm -f "$oldmajorver"; ln -s "$oldrelease" "$oldmajorver"
     fi
 
     # Create lockfile, sync older centos repo, delete lockfile
@@ -78,7 +79,7 @@ else
     if [ ! -d "$centosrepo/$release" ]; then
         # Make directory if it doesn't exist
         printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$release" | $teelog
-        cd "$centosrepo" || exit 40; mkdir "$release"; rm -f "$majorver"; ln -s "$release" "$majorver"
+        cd "$centosrepo" || exit 40; mkdir -p "$release"; rm -f "$majorver"; ln -s "$release" "$majorver"
     fi
 
     # Create lockfile, sync centos repo, delete lockfile
@@ -92,7 +93,7 @@ else
     if [ ! -d "$epelrepo/$oldmajorver" ]; then
         # Make directory if it doesn't exist
         printf '%s: Directory for EPEL %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldmajorver" | $teelog
-        mkdir "$epelrepo/$oldmajorver"
+        mkdir -p "$epelrepo/$oldmajorver"
     fi
 
     # Create lockfile, sync older epel repo, delete lockfile
@@ -106,7 +107,7 @@ else
     if [ ! -d "$epelrepo/testing/$oldmajorver" ]; then
         # Make directory if it doesn't exist
         printf '%s: Directory for EPEL %s Testing does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldmajorver" | $teelog
-        mkdir "$epelrepo/testing/$oldmajorver"
+        mkdir -p "$epelrepo/testing/$oldmajorver"
     fi
 
     # Create lockfile, sync older epel-testing repo, delete lockfile
@@ -120,7 +121,7 @@ else
     if [ ! -d "$epelrepo/$majorver" ]; then
         # Make directory if it doesn't exist
         printf '%s: Directory for EPEL %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$majorver" | $teelog
-        mkdir "$epelrepo/$majorver"
+        mkdir -p "$epelrepo/$majorver"
     fi
 
     # Create lockfile, sync epel repo, delete lockfile
@@ -134,7 +135,7 @@ else
     if [ ! -d "$epelrepo/testing/$majorver" ]; then
         # Make directory if it doesn't exist
         printf '%s: Directory for EPEL %s Testing does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$majorver" | $teelog
-        mkdir "$epelrepo/testing/$majorver"
+        mkdir -p "$epelrepo/testing/$majorver"
     fi
 
     # Create lockfile, sync epel-testing repo, delete lockfile
@@ -152,7 +153,7 @@ else
         if [ ! -d "$centosrepo/$oldprevrelease" ]; then
             # Make directory if it doesn't exist
             printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldprevrelease" | $teelog
-            cd "$centosrepo" || exit 40; mkdir "$oldprevrelease"
+            cd "$centosrepo" || exit 40; mkdir -p "$oldprevrelease"
         fi
 
         # Create lockfile, sync older previous centos repo, delete lockfile
@@ -170,7 +171,7 @@ else
         if [ ! -d "$centosrepo/$prevrelease" ]; then
             # Make directory if it doesn't exist
             printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$prevrelease" | $teelog
-            cd "$centosrepo" || exit 40; mkdir "$prevrelease"
+            cd "$centosrepo" || exit 40; mkdir -p "$prevrelease"
         fi
 
         # Create lockfile, sync previous centos repo, delete lockfile
