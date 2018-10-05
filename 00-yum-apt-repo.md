@@ -18,6 +18,6 @@ Filename | Description
 [`12-centos-local.repo`](#file-12-centos-local-repo) | Centos package config for clients.
 [`13-debian-sources.list`](#file-13-debian-sources-list) | Debian package sources for clients.
 [`14-ubuntu-sources.list`](#file-14-ubuntu-sources-list) | Ubuntu package sources for clients.
+[`97-repoupdate.sh`](#file-97-repoupdate-sh) | (ALPHA) Combined omni-mirror sync script.
 [`98-debmirror.pl`](#file-98-debmirror-pl) | Debmirror perl script provided for convenience.
 [`99-clamavmirror.py`](#file-99-clamavmirror-py) | ClamAV mirror python script provided for convenience.
-[`100-reposync.sh`](#file-100-reposync-sh) | (ALPHA) Combined omni-mirror script.
