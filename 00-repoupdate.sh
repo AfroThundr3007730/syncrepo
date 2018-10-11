@@ -1,36 +1,38 @@
 #!/bin/bash
 # Repository updater script for CentOS & Debian distros (upstream)
-# Currently syncs: CentOS, EPEL, Debian, Ubuntu, and ClamAV
-# Version 1.5.3 updated 20181004 by <AfroThundr>
+# Currently, this script can sync the following packages:
+SOFTWARE='CentOS, EPEL, Debian, Ubuntu, and ClamAV'
+
+AUTHOR='AfroThundr'
+UPDATED='20181011'
+VERSION='1.6.1'
 
 # TODO: Document all the things.
 
 # Version handler
 for i in "$@"; do
     if [ "$i" = "-v" ]; then
-        v=$(head -4 "$0" | tail -1)
-        printf '%s\n' "$v"
-        exit 0
+        printf '%s: Version %s, updated %s by %s\n' "${0##*/}" "$VERSION" "$UPDATED" "$AUTHOR"
     fi
 done
 
-# Declare some variables (modify as necessary)
-CENTOS_SYNC=true
-EPEL_SYNC=true
+# Declare some config variables (modify as necessary)
+CENTOS_SYNC=false
+EPEL_SYNC=false
 DEBIAN_SYNC=true
-DEBSEC_SYNC=true
+DEBSEC_SYNC=false
 UBUNTU_SYNC=true
-CLAMAV_SYNC=true
+CLAMAV_SYNC=false
 
 centarch=x86_64
 repodir=/srv/repository
-centosrepo=$repodir/centos
+centrepo=$repodir/centos
 epelrepo=$repodir/fedora-epel
 clamrepo=$repodir/clamav
 mirror=mirrors.mit.edu
 smirror=security.debian.org
 cmirror=database.clamav.net
-centoshost=$mirror::centos
+centhost=$mirror::centos
 epelhost=$mirror::fedora-epel
 
 debarch=amd64
@@ -45,29 +47,35 @@ lockfile=/var/lock/subsys/reposync
 logfile=/var/log/reposync.log
 progfile=/var/log/reposync_progress.log
 
-prodlist=$(head -3 "$0" | tail -1 | cut -d: -f2)
+# Declare some more vars. Lets use arrays, because reasons
+read -r -a allrels <<< $( rsync $centhost | awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' | sort -V )
+read -r -a oldrels <<< $( for i in "${allrels[@]}"; do if [ "${i%%.*}" == "(${allrels[-1]%%.*} - 1)" ]; then echo "$i"; fi; done )
+currel=${allrels[-1]}
+curmaj=${currel%%.*}
+cprerel=${allrels[-2]}
+oldrel=${oldrels[-1]}
+oldmaj=${oldrel%%.*}
+oprerel=${oldrels[-2]}
 
-# Declare some more vars (don't break these)
-centoslist=$(rsync $centoshost | awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}')
-release=$(echo "$centoslist" | tr ' ' '\n' | sort -V | tail -1)
-majorver=${release%%.*}
-oldmajorver=$((majorver - 1))
-oldrelease=$(echo "$centoslist" | tr ' ' '\n' | awk "/^$oldmajorver\\./" | sort -V | tail -1)
-prevrelease=$(echo "$centoslist" | tr ' ' '\n' | awk "/^$majorver\\./" | sort -V | tail -2 | head -1)
-oldprevrelease=$(echo "$centoslist" | tr ' ' '\n' | awk "/^$oldmajorver\\./" | sort -V | tail -2 | head -1)
+read -r -a uburels <<< $( curl -s http://releases.ubuntu.com | awk -F '[() ]' '/<li>/ && /LTS/ {print $6}' )
+read -r -a debrels <<< $( curl -s https://www.debian.org/releases/ | awk -F '[<>]' '/<li>/ && /<q>/ {print $7}' )
+ubucur=${uburels[1],}
+ubupre=${uburels[2],}
+debcur=${debrels[0]}
+debpre=${debrels[1]}
 
 ubuntucomps="main,restricted,universe,multiverse"
 debiancomps="main,contrib,non-free"
-ubunturel1="trusty,trusty-backports,trusty-proposed,trusty-security,trusty-updates"
-ubunturel2="xenial,xenial-backports,xenial-proposed,xenial-security,xenial-updates"
-debianrel1="wheezy,wheezy-backports,wheezy-updates,wheezy-proposed-updates"
-debianrel2="jessie,jessie-backports,jessie-updates,jessie-proposed-updates"
-debsecrel1="wheezy/updates"
-debsecrel2="jessie/updates"
+ubunturel1="$ubupre,$ubupre-backports,$ubupre-updates,$ubupre-proposed,$ubupre-security"
+ubunturel2="$ubucur,$ubucur-backports,$ubupre-updates,$ubucur-proposed,$ubucur-security"
+debianrel1="$debpre,$debpre-backports,$debpre-updates,$debpre-proposed-updates"
+debianrel2="$debcur,$debcur-backports,$debcur-updates,$debcur-proposed-updates"
+debsecrel1="$debpre/updates"
+debsecrel2="$debcur/updates"
 
 # Build the commands, with more variables
-centosexclude=$(echo --include={os,extras,updates,centosplus,readme,os/$centarch/{repodata,Packages}} --exclude={i386,"os/$centarch/*"} --exclude="/*")
-epelexclude=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$centarch/debug})
+centex=$(echo --include={os,extras,updates,centosplus,readme,os/$centarch/{repodata,Packages}} --exclude={i386,"os/$centarch/*"} --exclude="/*")
+epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$centarch/debug})
 rsync="rsync -hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$progfile"
 clamsync="clamavmirror -a $cmirror -d $clamrepo -u root -g www-data"
 teelog="tee -a $logfile $progfile"
@@ -84,7 +92,7 @@ dmirror2="debmirror -a $debarch --no-source --ignore-small-errors --method=http 
 
 # Here we go...
 printf '%s: Progress log reset.\n' "$(date -u +%FT%TZ)" > $progfile
-printf '%s: Started synchronization of %s repositories.\n' "$(date -u +%FT%TZ)" "$prodlist" | $teelog
+printf '%s: Started synchronization of %s repositories.\n' "$(date -u +%FT%TZ)" "$SOFTWARE" | $teelog
 printf '%s: Use tail -f %s to view progress.\n\n' "$(date -u +%FT%TZ)" "$progfile"
 
 # Check if the rsync script is already running
@@ -106,66 +114,66 @@ else
 
     if [ $CENTOS_SYNC == "true" ]; then
         # Check for older centos release directory
-        if [ ! -d "$centosrepo/$oldrelease" ]; then
+        if [ ! -d "$centrepo/$oldrel" ]; then
             # Make directory if it doesn't exist
-            printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldrelease" | $teelog
-            cd "$centosrepo" || exit 40; mkdir -p "$oldrelease"; rm -f "$oldmajorver"; ln -s "$oldrelease" "$oldmajorver"
+            printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldrel" | $teelog
+            cd "$centrepo" || exit 40; mkdir -p "$oldrel"; rm -f "$oldmaj"; ln -s "$oldrel" "$oldmaj"
         fi
 
         # Create lockfile, sync older centos repo, delete lockfile
-        printf '%s: Beginning rsync of Legacy CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$oldrelease" "$centoshost" | $teelog
+        printf '%s: Beginning rsync of Legacy CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$oldrel" "$centhost" | $teelog
         touch $lockfile
-        $rsync $centosexclude "$centoshost/$oldrelease/" "$centosrepo/$oldrelease/"
+        $rsync $centex "$centhost/$oldrel/" "$centrepo/$oldrel/"
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Check for centos release directory
-        if [ ! -d "$centosrepo/$release" ]; then
+        if [ ! -d "$centrepo/$currel" ]; then
             # Make directory if it doesn't exist
-            printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$release" | $teelog
-            cd "$centosrepo" || exit 40; mkdir -p "$release"; rm -f "$majorver"; ln -s "$release" "$majorver"
+            printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$currel" | $teelog
+            cd "$centrepo" || exit 40; mkdir -p "$currel"; rm -f "$curmaj"; ln -s "$currel" "$curmaj"
         fi
 
         # Create lockfile, sync centos repo, delete lockfile
-        printf '%s: Beginning rsync of CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$release" "$centoshost" | $teelog
+        printf '%s: Beginning rsync of CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$currel" "$centhost" | $teelog
         touch $lockfile
-        $rsync $centosexclude "$centoshost/$release/" "$centosrepo/$release/"
+        $rsync $centex "$centhost/$currel/" "$centrepo/$currel/"
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # We ain't out of the woods yet, continue to sync previous point release til its empty
         # Check for older previous centos point release placeholder
-        if [ ! -f "$centosrepo/$oldprevrelease/readme" ]; then
+        if [ ! -f "$centrepo/$oprerel/readme" ]; then
 
             # Check for older previous centos release directory
-            if [ ! -d "$centosrepo/$oldprevrelease" ]; then
+            if [ ! -d "$centrepo/$oprerel" ]; then
                 # Make directory if it doesn't exist
-                printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldprevrelease" | $teelog
-                cd "$centosrepo" || exit 40; mkdir -p "$oldprevrelease"
+                printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oprerel" | $teelog
+                cd "$centrepo" || exit 40; mkdir -p "$oprerel"
             fi
 
             # Create lockfile, sync older previous centos repo, delete lockfile
-            printf '%s: Beginning rsync of CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$oldprevrelease" "$centoshost" | $teelog
+            printf '%s: Beginning rsync of CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$oprerel" "$centhost" | $teelog
             touch $lockfile
-            $rsync $centosexclude "$centoshost/$oldprevrelease/" "$centosrepo/$oldprevrelease/"
+            $rsync $centex "$centhost/$oprerel/" "$centrepo/$oprerel/"
             rm -f $lockfile
             printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
         fi
 
         # Check for previous centos point release placeholder
-        if [ ! -f "$centosrepo/$prevrelease/readme" ]; then
+        if [ ! -f "$centrepo/$cprerel/readme" ]; then
 
             # Check for previous centos release directory
-            if [ ! -d "$centosrepo/$prevrelease" ]; then
+            if [ ! -d "$centrepo/$cprerel" ]; then
                 # Make directory if it doesn't exist
-                printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$prevrelease" | $teelog
-                cd "$centosrepo" || exit 40; mkdir -p "$prevrelease"
+                printf '%s: Directory for CentOS %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$cprerel" | $teelog
+                cd "$centrepo" || exit 40; mkdir -p "$cprerel"
             fi
 
             # Create lockfile, sync previous centos repo, delete lockfile
-            printf '%s: Beginning rsync of CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$prevrelease" "$centoshost" | $teelog
+            printf '%s: Beginning rsync of CentOS %s repo from %s.\n' "$(date -u +%FT%TZ)" "$cprerel" "$centhost" | $teelog
             touch $lockfile
-            $rsync $centosexclude "$centoshost/$prevrelease/" "$centosrepo/$prevrelease/"
+            $rsync $centex "$centhost/$cprerel/" "$centrepo/$cprerel/"
             rm -f $lockfile
             printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
         fi
@@ -173,58 +181,58 @@ else
 
     if [ $EPEL_SYNC == "true" ]; then
         # Check for older epel release directory
-        if [ ! -d "$epelrepo/$oldmajorver" ]; then
+        if [ ! -d "$epelrepo/$oldmaj" ]; then
             # Make directory if it doesn't exist
-            printf '%s: Directory for EPEL %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldmajorver" | $teelog
-            mkdir -p "$epelrepo/$oldmajorver"
+            printf '%s: Directory for EPEL %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldmaj" | $teelog
+            mkdir -p "$epelrepo/$oldmaj"
         fi
 
         # Create lockfile, sync older epel repo, delete lockfile
-        printf '%s: Beginning rsync of Legacy EPEL %s repo from %s.\n' "$(date -u +%FT%TZ)" "$oldmajorver" "$epelhost" | $teelog
+        printf '%s: Beginning rsync of Legacy EPEL %s repo from %s.\n' "$(date -u +%FT%TZ)" "$oldmaj" "$epelhost" | $teelog
         touch $lockfile
-        $rsync $epelexclude "$epelhost/$oldmajorver/" "$epelrepo/$oldmajorver/"
+        $rsync $epelex "$epelhost/$oldmaj/" "$epelrepo/$oldmaj/"
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Check for older epel-testing release directory
-        if [ ! -d "$epelrepo/testing/$oldmajorver" ]; then
+        if [ ! -d "$epelrepo/testing/$oldmaj" ]; then
             # Make directory if it doesn't exist
-            printf '%s: Directory for EPEL %s Testing does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldmajorver" | $teelog
-            mkdir -p "$epelrepo/testing/$oldmajorver"
+            printf '%s: Directory for EPEL %s Testing does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$oldmaj" | $teelog
+            mkdir -p "$epelrepo/testing/$oldmaj"
         fi
 
         # Create lockfile, sync older epel-testing repo, delete lockfile
-        printf '%s: Beginning rsync of Legacy EPEL %s Testing repo from %s.\n' "$(date -u +%FT%TZ)" "$oldmajorver" "$epelhost" | $teelog
+        printf '%s: Beginning rsync of Legacy EPEL %s Testing repo from %s.\n' "$(date -u +%FT%TZ)" "$oldmaj" "$epelhost" | $teelog
         touch $lockfile
-        $rsync $epelexclude "$epelhost/testing/$oldmajorver/" "$epelrepo/testing/$oldmajorver/"
+        $rsync $epelex "$epelhost/testing/$oldmaj/" "$epelrepo/testing/$oldmaj/"
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Check for epel release directory
-        if [ ! -d "$epelrepo/$majorver" ]; then
+        if [ ! -d "$epelrepo/$curmaj" ]; then
             # Make directory if it doesn't exist
-            printf '%s: Directory for EPEL %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$majorver" | $teelog
-            mkdir -p "$epelrepo/$majorver"
+            printf '%s: Directory for EPEL %s does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$curmaj" | $teelog
+            mkdir -p "$epelrepo/$curmaj"
         fi
 
         # Create lockfile, sync epel repo, delete lockfile
-        printf '%s: Beginning rsync of EPEL %s repo from %s.\n' "$(date -u +%FT%TZ)" "$majorver" "$epelhost" | $teelog
+        printf '%s: Beginning rsync of EPEL %s repo from %s.\n' "$(date -u +%FT%TZ)" "$curmaj" "$epelhost" | $teelog
         touch $lockfile
-        $rsync $epelexclude "$epelhost/$majorver/" "$epelrepo/$majorver/"
+        $rsync $epelex "$epelhost/$curmaj/" "$epelrepo/$curmaj/"
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Check for epel-testing release directory
-        if [ ! -d "$epelrepo/testing/$majorver" ]; then
+        if [ ! -d "$epelrepo/testing/$curmaj" ]; then
             # Make directory if it doesn't exist
-            printf '%s: Directory for EPEL %s Testing does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$majorver" | $teelog
-            mkdir -p "$epelrepo/testing/$majorver"
+            printf '%s: Directory for EPEL %s Testing does not exist. Creating..\n' "$(date -u +%FT%TZ)" "$curmaj" | $teelog
+            mkdir -p "$epelrepo/testing/$curmaj"
         fi
 
         # Create lockfile, sync epel-testing repo, delete lockfile
-        printf '%s: Beginning rsync of EPEL %s Testing repo from %s.\n' "$(date -u +%FT%TZ)" "$majorver" "$epelhost" | $teelog
+        printf '%s: Beginning rsync of EPEL %s Testing repo from %s.\n' "$(date -u +%FT%TZ)" "$curmaj" "$epelhost" | $teelog
         touch $lockfile
-        $rsync $epelexclude "$epelhost/testing/$majorver/" "$epelrepo/testing/$majorver/"
+        $rsync $epelex "$epelhost/testing/$curmaj/" "$epelrepo/testing/$curmaj/"
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
     fi
@@ -233,14 +241,14 @@ else
         export GNUPGHOME=$repodir/.gpg
 
         # Create lockfile, sync older ubuntu repo, delete lockfile
-        printf '%s: Beginning rsync of Legacy Ubuntu %s repo from %s.\n' "$(date -u +%FT%TZ)" "$(cut -d',' -f1 <<< ${ubunturel1^})" "$ubuntuhost" | $teelog
+        printf '%s: Beginning rsync of Legacy Ubuntu %s repo from %s.\n' "$(date -u +%FT%TZ)" "${ubupre^}" "$ubuntuhost" | $teelog
         touch $lockfile
         $dmirror"$ropts" $ubuntuopts1 $ubunturepo | tee -a $progfile
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Create lockfile, sync ubuntu repo, delete lockfile
-        printf '%s: Beginning rsync of Ubuntu %s repo from %s.\n' "$(date -u +%FT%TZ)" "$(cut -d',' -f1 <<< ${ubunturel2^})" "$ubuntuhost" | $teelog
+        printf '%s: Beginning rsync of Ubuntu %s repo from %s.\n' "$(date -u +%FT%TZ)" "${ubucur^}" "$ubuntuhost" | $teelog
         touch $lockfile
         $dmirror"$ropts" $ubuntuopts2 $ubunturepo | tee -a $progfile
         rm -f $lockfile
@@ -249,14 +257,14 @@ else
 
     if [ $DEBIAN_SYNC == "true" ]; then
         # Create lockfile, sync older debian repo, delete lockfile
-        printf '%s: Beginning rsync of Legacy Debian %s repo from %s.\n' "$(date -u +%FT%TZ)" "$(cut -d',' -f1 <<< ${debianrel1^})" "$debianhost" | $teelog
+        printf '%s: Beginning rsync of Legacy Debian %s repo from %s.\n' "$(date -u +%FT%TZ)" "${debpre^}" "$debianhost" | $teelog
         touch $lockfile
         $dmirror"$ropts" $debianopts1 $debianrepo | tee -a $progfile
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Create lockfile, sync debian repo, delete lockfile
-        printf '%s: Beginning rsync of Debian %s repo from %s.\n' "$(date -u +%FT%TZ)" "$(cut -d',' -f1 <<< ${debianrel2^})" "$debianhost" | $teelog
+        printf '%s: Beginning rsync of Debian %s repo from %s.\n' "$(date -u +%FT%TZ)" "${debcur^}" "$debianhost" | $teelog
         touch $lockfile
         $dmirror"$ropts" $debianopts2 $debianrepo | tee -a $progfile
         rm -f $lockfile
@@ -265,14 +273,14 @@ else
 
     if [ $DEBSEC_SYNC == "true" ]; then
         # Create lockfile, sync older debian security repo, delete lockfile
-        printf '%s: Beginning rsync of Legacy Debian %s Security repo from %s.\n' "$(date -u +%FT%TZ)" "$(cut -d',' -f1 <<< ${debianrel1^})" "$debsechost" | $teelog
+        printf '%s: Beginning rsync of Legacy Debian %s Security repo from %s.\n' "$(date -u +%FT%TZ)" "${debpre^}" "$debsechost" | $teelog
         touch $lockfile
         $dmirror2 $debsecopts1 $debsecrepo &>> $progfile
         rm -f $lockfile
         printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
 
         # Create lockfile, sync debian security repo, delete lockfile
-        printf '%s: Beginning rsync of Debian %s Security repo from %s.\n' "$(date -u +%FT%TZ)" "$(cut -d',' -f1 <<< ${debianrel2^})" "$debsechost" | $teelog
+        printf '%s: Beginning rsync of Debian %s Security repo from %s.\n' "$(date -u +%FT%TZ)" "${debcur^}" "$debsechost" | $teelog
         touch $lockfile
         $dmirror2 $debsecopts2 $debsecrepo &>> $progfile
         rm -f $lockfile
@@ -292,5 +300,5 @@ else
 fi
 
 # Now we're done
-printf '%s: Completed synchronization of %s repositories.\n\n' "$(date -u +%FT%TZ)" "$prodlist" | $teelog
+printf '%s: Completed synchronization of %s repositories.\n\n' "$(date -u +%FT%TZ)" "$SOFTWARE" | $teelog
 exit 0
