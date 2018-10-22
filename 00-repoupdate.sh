@@ -1,51 +1,52 @@
 #!/bin/bash
+# shellcheck disable=SC2086
 # Repository updater script for CentOS & Debian distros (upstream)
 # Currently, this script can sync the following packages:
 SOFTWARE='CentOS, EPEL, Debian, Ubuntu, and ClamAV'
 
 AUTHOR='AfroThundr'
-UPDATED='20181012'
-VERSION='1.6.3'
-
-# TODO: Document all the things, implement best practices.
+BASENAME="${0##*/}"
+MODIFIED='20181029'
+VERSION='1.6.5'
 
 # Argument handler
-# if [[ $# -eq 0 ]]; then
-#     printf 'No arguments specified, use -h for help.\n'
-#     exit 0
-# fi
+if [[ ! -n $1 ]]; then
+    printf 'No arguments specified, use -h for help.\n'
+    exit 0
+fi
 
-for i in "$@"; do
-    if [[ $i == -v ]]; then
+while [[ -n $1 ]]; do
+    if [[ $1 == -v ]]; then
         printf '%s: Version %s, updated %s by %s\n' \
-            "${0##*/}" "$VERSION" "$UPDATED" "$AUTHOR"
-        # ver=true
+            "$BASENAME" "$VERSION" "$MODIFIED" "$AUTHOR"
+        ver=true
         shift
-    elif [[ $i == -h ]]; then
+    elif [[ $1 == -h ]]; then
         printf 'Software repository updater script for linux distros.\n'
         printf 'Can curently sync the following repositories:\n'
         printf '%s\n\n' "$SOFTWARE"
-        printf 'Usage: %s [-v] (-h | -y)\n\n' "${0##*/}"
+        printf 'Usage: %s [-v] (-h | -y)\n\n' "$BASENAME"
         printf 'Options:\n'
         printf '  -h  Display help text.\n'
         printf '  -v  Emit version info.\n'
         printf '  -y  Confirm repo sync.\n'
         exit 0
-    # elif [[ $i == -y ]]; then
-    #     CONFIRM=true
-    #     shift
+    elif [[ $1 == -y ]]; then
+        CONFIRM=true
+        shift
     else
         printf 'Invalid argument specified, use -h for help.\n'
         exit 0
     fi
 done
 
-# if [[ ! $CONFIRM == true && ! $ver == true ]]; then
-#     printf 'Confirm with -y to start the sync.\n'
-#     exit 10
-# else
-#     exit 0
-# fi
+if [[ ! $CONFIRM == true ]]; then
+    if [[ ! $ver == true ]]; then
+        printf 'Confirm with -y to start the sync.\n'
+        exit 10
+    fi
+    exit 0
+fi
 
 # Declare global config variables (modify as necessary)
 CENTOS_SYNC=true
@@ -61,249 +62,252 @@ LOGFILE=/var/log/reposync.log
 PROGFILE=/var/log/reposync_progress.log
 
 # More internal config variables
-centarch=x86_64
-mirror=mirrors.mit.edu
-centrepo=$REPODIR/centos
-epelrepo=$REPODIR/fedora-epel
-centhost=$mirror::centos
-epelhost=$mirror::fedora-epel
+CENTARCH=x86_64
+MIRROR=mirrors.mit.edu
+CENTREPO=${REPODIR}/centos
+CENTHOST=${MIRROR}::centos
+EPELREPO=${REPODIR}/fedora-epel
+EPELHOST=${MIRROR}::fedora-epel
 
-debarch=amd64
-smirror=security.debian.org
-ubunturepo=$REPODIR/ubuntu
-debianrepo=$REPODIR/debian
-debsecrepo=$REPODIR/debian-security
-ubuntuhost=$mirror::ubuntu
-debianhost=$mirror::debian
-debsechost=$smirror/
+DEBARCH=amd64
+UBUNTUREPO=${REPODIR}/ubuntu
+UBUNTUHOST=${MIRROR}::ubuntu
+DEBIANREPO=${REPODIR}/debian
+DEBIANHOST=${MIRROR}::debian
 
-ropts="-hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$PROGFILE"
-teelog="tee -a $LOGFILE $PROGFILE"
+SMIRROR=security.debian.org
+DEBSECREPO=${REPODIR}/debian-security
+DEBSECHOST=${SMIRROR}/
 
-# Declare more variables (CentOS/EPEL)
-if [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]]; then
-    mapfile -t allrels <<< "$(
-        rsync $centhost | \
-        awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' | \
-        sort -V
-    )"
-    mapfile -t oldrels <<< "$(
-        for i in "${allrels[@]}"; do
-            if [[ ${i%%.*} -eq "(${allrels[-1]%%.*} - 1)" ]]; then
-                echo "$i";
-            fi;
-        done
-    )"
-    currel=${allrels[-1]}
-    curmaj=${currel%%.*}
-    cprerel=${allrels[-2]}
-    oldrel=${oldrels[-1]}
-    oldmaj=${oldrel%%.*}
-    oprerel=${oldrels[-2]}
+CMIRROR=database.clamav.net
+CLAMREPO=${REPODIR}/clamav
 
-    centex=$(echo --include={os,extras,updates,centosplus,readme,os/$centarch/{repodata,Packages}} --exclude={i386,"os/$centarch/*"} --exclude="/*")
-    epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$centarch/debug})
-fi
-
-# Declare more variables (Debian/Ubuntu)
-if [[ $UBUNTU_SYNC == true ]]; then
-    mapfile -t uburels <<< "$(
-        curl -s http://releases.ubuntu.com | \
-        awk -F '[() ]' '/<li>/ && /LTS/ {print $6}'
-    )"
-    ubucur=${uburels[1],}
-    ubupre=${uburels[2],}
-
-    ubuntucomps="main,restricted,universe,multiverse"
-    ubunturel1="$ubupre,$ubupre-backports,$ubupre-updates,$ubupre-proposed,$ubupre-security"
-    ubunturel2="$ubucur,$ubucur-backports,$ubucur-updates,$ubucur-proposed,$ubucur-security"
-    ubuntuopts1="-s $ubuntucomps -d $ubunturel1 -h $mirror -r /ubuntu"
-    ubuntuopts2="-s $ubuntucomps -d $ubunturel2 -h $mirror -r /ubuntu"
-fi
-
-if [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
-    mapfile -t debrels <<< "$(
-        curl -s https://www.debian.org/releases/ | \
-        awk -F '[<>]' '/<li>/ && /<q>/ {print $7}'
-    )"
-    debcur=${debrels[0]}
-    debpre=${debrels[1]}
-
-    debiancomps="main,contrib,non-free"
-    debianrel1="$debpre,$debpre-backports,$debpre-updates,$debpre-proposed-updates"
-    debianrel2="$debcur,$debcur-backports,$debcur-updates,$debcur-proposed-updates"
-    debianopts1="-s $debiancomps -d $debianrel1 -h $mirror -r /debian"
-    debianopts2="-s $debiancomps -d $debianrel2 -h $mirror -r /debian"
-
-    debsecrel1="$debpre/updates"
-    debsecrel2="$debcur/updates"
-    debsecopts1="-s $debiancomps -d $debsecrel1 -h $smirror -r /"
-    debsecopts2="-s $debiancomps -d $debsecrel2 -h $smirror -r /"
-fi
-
-if [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
-    dmirror="debmirror -a $debarch --no-source --ignore-small-errors --method=rsync --retry-rsync-packages=5 -p --rsync-options="
-    dmirror2="debmirror -a $debarch --no-source --ignore-small-errors --method=http --checksums -p"
-fi
-
-# And a few more (ClamAV)
-if [[ $CLAMAV_SYNC == true ]]; then
-    cmirror=database.clamav.net
-    clamrepo=$REPODIR/clamav
-    clamsync="clamavmirror -a $cmirror -d $clamrepo -u root -g www-data"
-fi
+ROPTS="-hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$PROGFILE"
+TEELOG="tee -a $LOGFILE $PROGFILE"
 
 # Here we go...
 printf '%s: Progress log reset.\n' "$(date -u +%FT%TZ)" > $PROGFILE
 printf '%s: Started synchronization of %s repositories.\n' \
-    "$(date -u +%FT%TZ)" "$SOFTWARE" | $teelog
+    "$(date -u +%FT%TZ)" "$SOFTWARE" | $TEELOG
 printf '%s: Use tail -f %s to view progress.\n\n' \
     "$(date -u +%FT%TZ)" "$PROGFILE"
 
 # Check if the rsync script is already running
 if [[ -f $LOCKFILE ]]; then
     printf '%s: Error: Repository updates are already running.\n\n' \
-        "$(date -u +%FT%TZ)" | $teelog
+        "$(date -u +%FT%TZ)" | $TEELOG
     exit 10
 
 # Check that we can reach the public mirror
-elif ! ping -c 5 $mirror &> /dev/null; then
+elif ! ping -c 5 $MIRROR &> /dev/null; then
     printf '%s: Error: Cannot reach the %s mirror server.\n\n' \
-        "$(date -u +%FT%TZ)" "$mirror" | $teelog
+        "$(date -u +%FT%TZ)" "$MIRROR" | $TEELOG
     exit 20
 
 # Check that the repository is mounted
 elif ! mount | grep $REPODIR &> /dev/null; then
     printf '%s: Error: Directory %s is not mounted.\n\n' \
-        "$(date -u +%FT%TZ)" "$REPODIR" | $teelog
+        "$(date -u +%FT%TZ)" "$REPODIR" | $TEELOG
     exit 30
 
+# Everything is good, let's continue
 else
+    # Declare more variables (CentOS/EPEL)
+    if [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]]; then
+        mapfile -t allrels <<< "$(
+            rsync $CENTHOST | \
+            awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
+            sort -V
+        )"
+        mapfile -t oldrels <<< "$(
+            for i in "${allrels[@]}"; do
+                if [[ ${i%%.*} -eq "(${allrels[-1]%%.*} - 1)" ]]; then
+                    echo "$i";
+                fi;
+            done
+        )"
+        currel=${allrels[-1]}
+        curmaj=${currel%%.*}
+        cprerel=${allrels[-2]}
+        oldrel=${oldrels[-1]}
+        oldmaj=${oldrel%%.*}
+        oprerel=${oldrels[-2]}
+
+        centex=$(echo --include={os,extras,updates,centosplus,readme,os/$CENTARCH/{repodata,Packages}} --exclude={i386,"os/$CENTARCH/*"} --exclude="/*")
+        epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$CENTARCH/debug})
+    fi
+
+    # Declare more variables (Debian/Ubuntu)
+    if [[ $UBUNTU_SYNC == true ]]; then
+        mapfile -t uburels <<< "$(
+            curl -sL $MIRROR/ubuntu-releases/HEADER.html |
+            awk -F '[() ]' '/<li>/ && /LTS/ {print $6}'
+        )"
+        ubucur=${uburels[1],}
+        ubupre=${uburels[2],}
+
+        ubuntucomps="main,restricted,universe,multiverse"
+        ubunturel1="$ubupre,$ubupre-backports,$ubupre-updates,$ubupre-proposed,$ubupre-security"
+        ubunturel2="$ubucur,$ubucur-backports,$ubucur-updates,$ubucur-proposed,$ubucur-security"
+        ubuntuopts1="-s $ubuntucomps -d $ubunturel1 -h $MIRROR -r /ubuntu"
+        ubuntuopts2="-s $ubuntucomps -d $ubunturel2 -h $MIRROR -r /ubuntu"
+    fi
+
+    if [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
+        mapfile -t debrels <<< "$(
+            curl -sL $MIRROR/debian/README.html |
+            awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
+        )"
+        debcur=${debrels[0]}
+        debpre=${debrels[1]}
+
+        debiancomps="main,contrib,non-free"
+        debianrel1="$debpre,$debpre-backports,$debpre-updates,$debpre-proposed-updates"
+        debianrel2="$debcur,$debcur-backports,$debcur-updates,$debcur-proposed-updates"
+        debianopts1="-s $debiancomps -d $debianrel1 -h $MIRROR -r /debian"
+        debianopts2="-s $debiancomps -d $debianrel2 -h $MIRROR -r /debian"
+
+        debsecrel1="$debpre/updates"
+        debsecrel2="$debcur/updates"
+        debsecopts1="-s $debiancomps -d $debsecrel1 -h $SMIRROR -r /"
+        debsecopts2="-s $debiancomps -d $debsecrel2 -h $SMIRROR -r /"
+    fi
+
+    if [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
+        dmirror="debmirror -a $DEBARCH --no-source --ignore-small-errors --method=rsync --retry-rsync-packages=5 -p --rsync-options="
+        dmirror2="debmirror -a $DEBARCH --no-source --ignore-small-errors --method=http --checksums -p"
+    fi
+
+    # And a few more (ClamAV)
+    if [[ $CLAMAV_SYNC == true ]]; then
+        clamsync="clamavmirror -a $CMIRROR -d $CLAMREPO -u root -g www-data"
+    fi
+
     # There can be only one...
-    touch $LOCKFILE
+    touch "$LOCKFILE"
 
     if [[ $CENTOS_SYNC == true ]]; then
         # Check for older centos release directory
-        if [[ ! -d $centrepo/$oldrel ]]; then
-            mkdir -p "$centrepo/$oldrel"
-            ln -frs "$centrepo/$oldrel" "$centrepo/$oldmaj"
+        if [[ ! -d $CENTREPO/$oldrel ]]; then
+            mkdir -p "$CENTREPO/$oldrel"
+            ln -frs "$CENTREPO/$oldrel" "$CENTREPO/$oldmaj"
         fi
 
         # Sync older centos repository
         printf '%s: Beginning sync of legacy CentOS %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$oldrel" "$centhost" | $teelog
-        rsync $ropts $centex "$centhost/$oldrel/" "$centrepo/$oldrel/"
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "$oldrel" "$CENTHOST" | $TEELOG
+        rsync $ROPTS $centex "$CENTHOST/$oldrel/" "$CENTREPO/$oldrel/"
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Check for centos release directory
-        if [[ ! -d $centrepo/$currel ]]; then
-            mkdir -p "$centrepo/$currel"
-            ln -frs "$centrepo/$currel" "$centrepo/$curmaj"
+        if [[ ! -d $CENTREPO/$currel ]]; then
+            mkdir -p "$CENTREPO/$currel"
+            ln -frs "$CENTREPO/$currel" "$CENTREPO/$curmaj"
         fi
 
         # Sync current centos repository
         printf '%s: Beginning sync of current CentOS %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$currel" "$centhost" | $teelog
-        rsync $ropts $centex "$centhost/$currel/" "$centrepo/$currel/"
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "$currel" "$CENTHOST" | $TEELOG
+        rsync $ROPTS $centex "$CENTHOST/$currel/" "$CENTREPO/$currel/"
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Continue to sync previous point releases til they're empty
         # Check for older previous centos point release placeholder
-        if [[ ! -f $centrepo/$oprerel/readme ]]; then
+        if [[ ! -f $CENTREPO/$oprerel/readme ]]; then
 
             # Check for older previous centos release directory
-            if [[ ! -d $centrepo/$oprerel ]]; then
-                mkdir -p "$centrepo/$oprerel"
+            if [[ ! -d $CENTREPO/$oprerel ]]; then
+                mkdir -p "$CENTREPO/$oprerel"
             fi
 
             # Sync older previous centos repository
             printf '%s: Beginning sync of legacy CentOS %s repository from %s.\n' \
-                "$(date -u +%FT%TZ)" "$oprerel" "$centhost" | $teelog
-            rsync $ropts $centex "$centhost/$oprerel/" "$centrepo/$oprerel/"
-            printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+                "$(date -u +%FT%TZ)" "$oprerel" "$CENTHOST" | $TEELOG
+            rsync $ROPTS $centex "$CENTHOST/$oprerel/" "$CENTREPO/$oprerel/"
+            printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
         fi
 
         # Check for previous centos point release placeholder
-        if [[ ! -f $centrepo/$cprerel/readme ]]; then
+        if [[ ! -f $CENTREPO/$cprerel/readme ]]; then
 
             # Check for previous centos release directory
-            if [[ ! -d $centrepo/$cprerel ]]; then
-                mkdir -p "$centrepo/$cprerel"
+            if [[ ! -d $CENTREPO/$cprerel ]]; then
+                mkdir -p "$CENTREPO/$cprerel"
             fi
 
             # Sync current previous centos repository
             printf '%s: Beginning sync of current CentOS %s repository from %s.\n' \
-                "$(date -u +%FT%TZ)" "$cprerel" "$centhost" | $teelog
-            rsync $ropts $centex "$centhost/$cprerel/" "$centrepo/$cprerel/"
-            printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+                "$(date -u +%FT%TZ)" "$cprerel" "$CENTHOST" | $TEELOG
+            rsync $ROPTS $centex "$CENTHOST/$cprerel/" "$CENTREPO/$cprerel/"
+            printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
         fi
     fi
 
     if [[ $EPEL_SYNC == true ]]; then
         # Check for older epel release directory
-        if [[ ! -d $epelrepo/$oldmaj ]]; then
-            mkdir -p "$epelrepo/$oldmaj"
+        if [[ ! -d $EPELREPO/$oldmaj ]]; then
+            mkdir -p "$EPELREPO/$oldmaj"
         fi
 
         # Sync older epel repository
         printf '%s: Beginning sync of legacy EPEL %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$oldmaj" "$epelhost" | $teelog
-        rsync $ropts $epelex "$epelhost/$oldmaj/" "$epelrepo/$oldmaj/"
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "$oldmaj" "$EPELHOST" | $TEELOG
+        rsync $ROPTS $epelex "$EPELHOST/$oldmaj/" "$EPELREPO/$oldmaj/"
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Check for older epel-testing release directory
-        if [[ ! -d $epelrepo/testing/$oldmaj ]]; then
-            mkdir -p "$epelrepo/testing/$oldmaj"
+        if [[ ! -d $EPELREPO/testing/$oldmaj ]]; then
+            mkdir -p "$EPELREPO/testing/$oldmaj"
         fi
 
         # Sync older epel-testing repository
         printf '%s: Beginning sync of legacy EPEL %s Testing repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$oldmaj" "$epelhost" | $teelog
-        rsync $ropts $epelex "$epelhost/testing/$oldmaj/" "$epelrepo/testing/$oldmaj/"
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "$oldmaj" "$EPELHOST" | $TEELOG
+        rsync $ROPTS $epelex "$EPELHOST/testing/$oldmaj/" "$EPELREPO/testing/$oldmaj/"
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Check for current epel release directory
-        if [[ ! -d $epelrepo/$curmaj ]]; then
-            mkdir -p "$epelrepo/$curmaj"
+        if [[ ! -d $EPELREPO/$curmaj ]]; then
+            mkdir -p "$EPELREPO/$curmaj"
         fi
 
         # Sync current epel repository
         printf '%s: Beginning sync of current EPEL %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$curmaj" "$epelhost" | $teelog
-        rsync $ropts $epelex "$epelhost/$curmaj/" "$epelrepo/$curmaj/"
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "$curmaj" "$EPELHOST" | $TEELOG
+        rsync $ROPTS $epelex "$EPELHOST/$curmaj/" "$EPELREPO/$curmaj/"
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Check for current epel-testing release directory
-        if [[ ! -d $epelrepo/testing/$curmaj ]]; then
-            mkdir -p "$epelrepo/testing/$curmaj"
+        if [[ ! -d $EPELREPO/testing/$curmaj ]]; then
+            mkdir -p "$EPELREPO/testing/$curmaj"
         fi
 
         # Sync current epel-testing repository
         printf '%s: Beginning sync of current EPEL %s Testing repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$curmaj" "$epelhost" | $teelog
-        rsync $ropts $epelex "$epelhost/testing/$curmaj/" "$epelrepo/testing/$curmaj/"
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "$curmaj" "$EPELHOST" | $TEELOG
+        rsync $ROPTS $epelex "$EPELHOST/testing/$curmaj/" "$EPELREPO/testing/$curmaj/"
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
     fi
 
     if [[ $UBUNTU_SYNC == true ]]; then
         export GNUPGHOME=$REPODIR/.gpg
 
         # Check for ubuntu release directory
-        if [[ ! -d $ubunturepo ]]; then
-            mkdir -p "$ubunturepo"
+        if [[ ! -d $UBUNTUREPO ]]; then
+            mkdir -p "$UBUNTUREPO"
         fi
 
         # Sync older ubuntu repository
         printf '%s: Beginning sync of legacy Ubuntu %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "${ubupre^}" "$ubuntuhost" | $teelog
-        $dmirror"$ropts" $ubuntuopts1 $ubunturepo | tee -a $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "${ubupre^}" "$UBUNTUHOST" | $TEELOG
+        $dmirror"$ROPTS" $ubuntuopts1 $UBUNTUREPO | tee -a $PROGFILE
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Sync current ubuntu repository
         printf '%s: Beginning sync of current Ubuntu %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "${ubucur^}" "$ubuntuhost" | $teelog
-        $dmirror"$ropts" $ubuntuopts2 $ubunturepo | tee -a $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "${ubucur^}" "$UBUNTUHOST" | $TEELOG
+        $dmirror"$ROPTS" $ubuntuopts2 $UBUNTUREPO | tee -a $PROGFILE
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         unset GNUPGHOME
     fi
@@ -312,21 +316,21 @@ else
         export GNUPGHOME=$REPODIR/.gpg
 
         # Check for debian release directory
-        if [[ ! -d $debianrepo ]]; then
-            mkdir -p "$debianrepo"
+        if [[ ! -d $DEBIANREPO ]]; then
+            mkdir -p "$DEBIANREPO"
         fi
 
         # Sync older debian repository
         printf '%s: Beginning sync of legacy Debian %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "${debpre^}" "$debianhost" | $teelog
-        $dmirror"$ropts" $debianopts1 $debianrepo | tee -a $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "${debpre^}" "$DEBIANHOST" | $TEELOG
+        $dmirror"$ROPTS" $debianopts1 $DEBIANREPO | tee -a $PROGFILE
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Sync current debian repository
         printf '%s: Beginning sync of current Debian %s repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "${debcur^}" "$debianhost" | $teelog
-        $dmirror"$ropts" $debianopts2 $debianrepo | tee -a $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "${debcur^}" "$DEBIANHOST" | $TEELOG
+        $dmirror"$ROPTS" $debianopts2 $DEBIANREPO | tee -a $PROGFILE
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         unset GNUPGHOME
     fi
@@ -335,43 +339,43 @@ else
         export GNUPGHOME=$REPODIR/.gpg
 
         # Check for ubuntu release directory
-        if [[ ! -d $debianrepo ]]; then
-            mkdir -p "$debianrepo"
+        if [[ ! -d $DEBIANREPO ]]; then
+            mkdir -p "$DEBIANREPO"
         fi
 
         # Sync older debian security repository
         printf '%s: Beginning sync of legacy Debian %s Security repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "${debpre^}" "$debsechost" | $teelog
-        $dmirror2 $debsecopts1 $debsecrepo &>> $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "${debpre^}" "$DEBSECHOST" | $TEELOG
+        $dmirror2 $debsecopts1 $DEBSECREPO &>> $PROGFILE
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         # Sync current debian security repository
         printf '%s: Beginning sync of current Debian %s Security repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "${debcur^}" "$debsechost" | $teelog
-        $dmirror2 $debsecopts2 $debsecrepo &>> $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+            "$(date -u +%FT%TZ)" "${debcur^}" "$DEBSECHOST" | $TEELOG
+        $dmirror2 $debsecopts2 $DEBSECREPO &>> $PROGFILE
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
 
         unset GNUPGHOME
     fi
 
     if [[ $CLAMAV_SYNC == true ]]; then
         # Check for clamav release directory
-        if [[ ! -d $clamrepo ]]; then
-            mkdir -p "$clamrepo"
+        if [[ ! -d $CLAMREPO ]]; then
+            mkdir -p "$CLAMREPO"
         fi
 
         # Sync clamav repository
         printf '%s: Beginning sync of ClamAV repository from %s.\n' \
-            "$(date -u +%FT%TZ)" "$cmirror" | $teelog
+            "$(date -u +%FT%TZ)" "$CMIRROR" | $TEELOG
         $clamsync &>> $PROGFILE
-        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $teelog
+        printf '%s: Done.\n\n' "$(date -u +%FT%TZ)" | $TEELOG
     fi
 
     # Clear the lockfile
-    rm -f $LOCKFILE
+    rm -f "$LOCKFILE"
 fi
 
 # Now we're done
 printf '%s: Completed synchronization of %s repositories.\n\n' \
-    "$(date -u +%FT%TZ)" "$SOFTWARE" | $teelog
+    "$(date -u +%FT%TZ)" "$SOFTWARE" | $TEELOG
 exit 0
