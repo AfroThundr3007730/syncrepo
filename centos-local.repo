@@ -3,42 +3,42 @@
 
 [Base]
 name=CentOS-$releasever - Base
-baseurl=http://yum.dmz.local/repos/centos/$releasever/os/$basearch/
+baseurl=http://yum.lab.local/repos/centos/$releasever/os/$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
 
 [updates]
 name=CentOS-$releasever - Updates
-baseurl=http://yum.dmz.local/repos/centos/$releasever/updates/$basearch/
+baseurl=http://yum.lab.local/repos/centos/$releasever/updates/$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
 
 [extras]
 name=CentOS-$releasever - Extras
-baseurl=http://yum.dmz.local/repos/centos/$releasever/extras/$basearch/
+baseurl=http://yum.lab.local/repos/centos/$releasever/extras/$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
 
 [centosplus]
 name=CentOS-$releasever - Plus
-baseurl=http://yum.dmz.local/repos/centos/$releasever/centosplus/$basearch/
+baseurl=http://yum.lab.local/repos/centos/$releasever/centosplus/$basearch/
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
 
 [epel]
 name=Extra Packages for Enterprise Linux 7
-baseurl=http://yum.dmz.local/repos/epel/$releasever/$basearch
+baseurl=http://yum.lab.local/repos/epel/$releasever/$basearch
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
 
 [epel-testing]
 name=Extra Packages for Enterprise Linux 7
-baseurl=http://yum.dmz.local/repos/epel/testing/$releasever/$basearch
+baseurl=http://yum.lab.local/repos/epel/testing/$releasever/$basearch
 gpgcheck=1
 enabled=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7

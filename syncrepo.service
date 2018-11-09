@@ -3,7 +3,7 @@ Description=Updates CentOS and EPEL yum repositories.
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/repoupdate
+ExecStart=/usr/local/sbin/syncrepo
 StandardOutput=syslog
 User=root
 Group=www-data

@@ -1,24 +1,23 @@
+syncrepo.sh
+-----------
+An all-in-one software repository sync script (or at least it aims to be)
+
 Below are configuration files for creating upstream and downstream yum and apt repositories.
 These can be hosted on a CentOS, Debian, or Ubuntu system and served via rsync or http.
 The only requirements are rsync and a webserver, such as apache, and also debmirror.
+Note that not all required setup steps are listed here (TODO: add setup guide).
 
-Filename               | Description
----                    | ---
-`repoupdate.sh`        | (ALPHA) Combined all-in-one repo sync script.
-`yum-repoupdate-us.sh` | Upstream yum repository updater script.
-`yum-repoupdate-ds.sh` | Downstream yum repository updater script.
-`apt-repoupdate-us.sh` | Upstream apt repository updater script.
-`apt-repoupdate-ds.sh` | Downstream apt repository updater script.
-`repoupdate.service`   | Systemd service unit for repoupdate script.
-`repoupdate.timer`     | Systemd timer unit for repoupdate script.
-`yum-rsyncd.conf`      | Rsync config for yum repository.
-`apt-rsyncd.conf`      | Rsync config for apt repository.
-`rsyncd.service`       | Systemd service unit for rsyncd service.
-`yum-vhost.conf`       | Apache vhost config for yum repository.
-`apt-vhost.conf`       | Apache vhost config for apt repository.
-`centos-local.repo`    | Centos package config for clients.
-`debian-sources.list`  | Debian package sources for clients.
-`ubuntu-sources.list`  | Ubuntu package sources for clients.
-`repoupdate-log.conf`  | Logrotate config file.
-`debmirror.pl`         | Debmirror perl script provided for convenience.
-`clamavmirror.py`      | ClamAV mirror python script provided for convenience.
+Filename               | Description                                 | Notes
+---                    | ---                                         | ---
+`syncrepo.sh`          | New all-in-one repository sync script     . | Still alpha. Last tested: v1.6.5
+`syncrepo.service`     | Systemd service unit for syncrepo script.   | 
+`syncrepo.timer`       | Systemd timer unit for syncrepo script.     | 
+`syncrepo-vhost.conf`  | Apache vhost config for repository.         | Combined the old ones
+`syncrepo-log.conf`    | Logrotate config file.                      | 
+`rsyncd.conf`          | Rsync config for repository.                | Combined the old ones
+`rsyncd.service`       | Systemd service unit for rsyncd service.    | 
+`centos-local.repo`    | Centos package config for clients.          | 
+`debian-sources.list`  | Debian package sources for clients.         | 
+`ubuntu-sources.list`  | Ubuntu package sources for clients.         | 
+`debmirror.pl`         | Copy of `debmirror` for convenience.        | Should use the distro packaged version
+`clamavmirror.py`      | Copy of `clamavmirror` for convenience.     | [Cisco-Talos/clamav-faq](https://github.com/Cisco-Talos/clamav-faq/blob/master/mirrors/clamavmirror.py)
