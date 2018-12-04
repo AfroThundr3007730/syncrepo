@@ -8,7 +8,7 @@ set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
     MODIFIED='20181203'
-    VERSION='1.7.0-rc2-us'
+    VERSION='1.7.0-rc3'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, and ClamAV'
 
@@ -21,7 +21,7 @@ set_globals() {
     UBUNTU_SYNC=true
     CLAMAV_SYNC=true
     SONION_SYNC=true
-    LOCAL_SYNC=false
+    LOCAL_SYNC=true
 
     REPODIR=/srv/repository
     LOCKFILE=/var/lock/subsys/syncrepo
@@ -54,9 +54,6 @@ set_globals() {
     CMIRROR=database.clamav.net
     CLAMREPO=${REPODIR}/clamav
 
-    LOCALREPO=${REPODIR}/local
-    LOCALHOST=${MIRROR}::local
-
     ROPTS="-hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file=$PROGFILE"
     TEELOG="tee -a $LOGFILE $PROGFILE"
 }
@@ -65,7 +62,7 @@ set_globals() {
 argument_handler() {
     if [[ ! -n $1 ]]; then
         say -h 'No arguments specified, use -h for help.'
-        exit 0
+        exit 10
     fi
 
     while [[ -n $1 ]]; do
@@ -87,11 +84,13 @@ argument_handler() {
             # -l|--log-file
             # -p|--prog-log
             # -u|--upstream
+            # -s|--sync (array)
             # --centos-sync
             # --epel-sync
             # --ubuntu-sync
             # --debian-sync
             # --debsec-sync
+            # --sonion-sync
             # --clamav-sync
             # --local-sync
             exit 0
@@ -100,7 +99,7 @@ argument_handler() {
             shift
         else
             say -h 'Invalid argument specified, use -h for help.'
-            exit 0
+            exit 10
         fi
     done
 
@@ -116,7 +115,7 @@ argument_handler() {
 # Log message and print to stdout
 # shellcheck disable=SC2059
 say() {
-    export TERM=${TERM:=xterm}
+    [[ -n $TERM ]] && export TERM=xterm
     if [[ $1 == -h ]]; then
         shift; local s=$1; shift
         tput setaf 2; printf "$s\\n" "$@"
@@ -126,7 +125,7 @@ say() {
         else
             local log=true
         fi
-        [[ $1 == -t ]] && (echo > $PROGFILE; shift)
+        [[ $1 == -t ]] && { echo > $PROGFILE; shift; }
         if [[ $1 == info || $1 == warn || $1 == err ]]; then
             [[ $1 == info ]] && tput setaf 4
             [[ $1 == warn ]] && tput setaf 3
@@ -150,15 +149,13 @@ build_vars() {
     # Declare more variables (CentOS/EPEL)
     if [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]]; then
         mapfile -t allrels <<< "$(
-            rsync $CENTHOST | \
+            rsync $CENTHOST |
             awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
             sort -V
         )"
         mapfile -t oldrels <<< "$(
             for i in "${allrels[@]}"; do
-                if [[ ${i%%.*} -eq "(${allrels[-1]%%.*} - 1)" ]]; then
-                    echo "$i";
-                fi;
+                [[ ${i%%.*} -eq "(${allrels[-1]%%.*} - 1)" ]] && echo "$i"
             done
         )"
         currel=${allrels[-1]}
@@ -184,10 +181,9 @@ build_vars() {
         ubuntucomps="main,restricted,universe,multiverse"
         ubunturel1="$ubupre,$ubupre-backports,$ubupre-updates,$ubupre-proposed,$ubupre-security"
         ubunturel2="$ubucur,$ubucur-backports,$ubucur-updates,$ubucur-proposed,$ubucur-security"
-        ubuntuopts1="-s $ubuntucomps -d $ubunturel1 -h $MIRROR -r /ubuntu"
-        ubuntuopts2="-s $ubuntucomps -d $ubunturel2 -h $MIRROR -r /ubuntu"
+        ubuntuopts="-s $ubuntucomps -d $ubunturel1 -d $ubunturel2 -h $MIRROR -r /ubuntu"
 
-        sonionopts="s main -d $ubucur -h $SOMIRROR --rsync-extras=none -r /securityonion/stable/ubuntu"
+        sonionopts="s main -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extras=none -r /securityonion/stable/ubuntu"
     fi
 
     if [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
@@ -201,13 +197,11 @@ build_vars() {
         debiancomps="main,contrib,non-free"
         debianrel1="$debpre,$debpre-backports,$debpre-updates,$debpre-proposed-updates"
         debianrel2="$debcur,$debcur-backports,$debcur-updates,$debcur-proposed-updates"
-        debianopts1="-s $debiancomps -d $debianrel1 -h $MIRROR -r /debian"
-        debianopts2="-s $debiancomps -d $debianrel2 -h $MIRROR -r /debian"
+        debianopts="-s $debiancomps -d $debianrel1 -d $debianrel2 -h $MIRROR -r /debian"
 
         debsecrel1="$debpre/updates"
         debsecrel2="$debcur/updates"
-        debsecopts1="-s $debiancomps -d $debsecrel1 -h $SMIRROR -r /"
-        debsecopts2="-s $debiancomps -d $debsecrel2 -h $SMIRROR -r /"
+        debsecopts="-s $debiancomps -d $debsecrel1 -d $debsecrel2 -h $SMIRROR -r /"
     fi
 
     if [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true || $DEBSEC_SYNC == true || $SONION_SYNC == true ]]; then
@@ -224,108 +218,49 @@ build_vars() {
 }
 
 centos_sync() {
-    # Check for older centos release directory
-    if [[ ! -d $CENTREPO/$oldrel ]]; then
-        mkdir -p "$CENTREPO/$oldrel"
-        ln -frs "$CENTREPO/$oldrel" "$CENTREPO/$oldmaj"
-    fi
+    for repo in $oldrel $currel; do
+        # Check for centos release directory
+        [[ -d $CENTREPO/$repo ]] || mkdir -p "$CENTREPO/$repo"
 
-    # Sync older centos repository
-    say 'Beginning sync of legacy CentOS %s repository from %s.' \
-        "$oldrel" "$CENTHOST"
-    rsync $ROPTS $centex "$CENTHOST/$oldrel/" "$CENTREPO/$oldrel/"
-    say 'Done.\n'
+        # Sync current centos repository
+        say 'Beginning sync of CentOS %s repository from %s.' \
+            "$repo" "$CENTHOST"
+        rsync $ROPTS $centex "$CENTHOST/$repo/" "$CENTREPO/$repo/"
+        say 'Done.\n'
+    done
 
-    # Check for centos release directory
-    if [[ ! -d $CENTREPO/$currel ]]; then
-        mkdir -p "$CENTREPO/$currel"
-        ln -frs "$CENTREPO/$currel" "$CENTREPO/$curmaj"
-    fi
-
-    # Sync current centos repository
-    say 'Beginning sync of current CentOS %s repository from %s.' \
-        "$currel" "$CENTHOST"
-    rsync $ROPTS $centex "$CENTHOST/$currel/" "$CENTREPO/$currel/"
-    say 'Done.\n'
+    # Create the symlink, or move, if necessary
+    [[ -L ${repo%%.*} && $(readlink "${repo%%.*}") == "$repo" ]] ||
+        ln -frs "$CENTREPO/$repo" "$CENTREPO/${repo%%.*}"
 
     # Continue to sync previous point releases til they're empty
-    # Check for older previous centos point release placeholder
-    if [[ ! -f $CENTREPO/$oprerel/readme ]]; then
+    for repo in $oprerel $cprerel; do
+        # Check for release directory
+        [[ -d $CENTREPO/$repo ]] || mkdir -p "$CENTREPO/$repo"
 
-        # Check for older previous centos release directory
-        if [[ ! -d $CENTREPO/$oprerel ]]; then
-            mkdir -p "$CENTREPO/$oprerel"
-        fi
-
-        # Sync older previous centos repository
-        say 'Beginning sync of legacy CentOS %s repository from %s.' \
-            "$oprerel" "$CENTHOST"
-        rsync $ROPTS $centex "$CENTHOST/$oprerel/" "$CENTREPO/$oprerel/"
-        say 'Done.\n'
-    fi
-
-    # Check for previous centos point release placeholder
-    if [[ ! -f $CENTREPO/$cprerel/readme ]]; then
-
-        # Check for previous centos release directory
-        if [[ ! -d $CENTREPO/$cprerel ]]; then
-            mkdir -p "$CENTREPO/$cprerel"
-        fi
-
-        # Sync current previous centos repository
-        say 'Beginning sync of current CentOS %s repository from %s.' \
-            "$cprerel" "$CENTHOST"
-        rsync $ROPTS $centex "$CENTHOST/$cprerel/" "$CENTREPO/$cprerel/"
-        say 'Done.\n'
-    fi
+        # Check for point release placeholder
+        [[ -f $CENTREPO/$repo/readme ]] || {
+            # Sync previous centos repository
+            say 'Beginning sync of CentOS %s repository from %s.' \
+                "$repo" "$CENTHOST"
+            rsync $ROPTS $centex "$CENTHOST/$repo/" "$CENTREPO/$repo/"
+            say 'Done.\n'
+        }
+    done
 
     return 0
 }
 
 epel_sync() {
-    # Check for older epel release directory
-    if [[ ! -d $EPELREPO/$oldmaj ]]; then
-        mkdir -p "$EPELREPO/$oldmaj"
-    fi
+    for repo in $oldmaj $curmaj testing/{$oldmaj,$curmaj}; do
+        # Check for epel release directory
+        [[ -d $EPELREPO/$repo ]] || mkdir -p "$EPELREPO/$repo"
 
-    # Sync older epel repository
-    say 'Beginning sync of legacy EPEL %s repository from %s.' \
-        "$oldmaj" "$EPELHOST"
-    rsync $ROPTS $epelex "$EPELHOST/$oldmaj/" "$EPELREPO/$oldmaj/"
-    say 'Done.\n'
-
-    # Check for older epel-testing release directory
-    if [[ ! -d $EPELREPO/testing/$oldmaj ]]; then
-        mkdir -p "$EPELREPO/testing/$oldmaj"
-    fi
-
-    # Sync older epel-testing repository
-    say 'Beginning sync of legacy EPEL %s Testing repository from %s.' \
-        "$oldmaj" "$EPELHOST"
-    rsync $ROPTS $epelex "$EPELHOST/testing/$oldmaj/" "$EPELREPO/testing/$oldmaj/"
-    say 'Done.\n'
-
-    # Check for current epel release directory
-    if [[ ! -d $EPELREPO/$curmaj ]]; then
-        mkdir -p "$EPELREPO/$curmaj"
-    fi
-
-    # Sync current epel repository
-    say 'Beginning sync of current EPEL %s repository from %s.' \
-        "$curmaj" "$EPELHOST"
-    rsync $ROPTS $epelex "$EPELHOST/$curmaj/" "$EPELREPO/$curmaj/"
-    say 'Done.\n'
-
-    # Check for current epel-testing release directory
-    if [[ ! -d $EPELREPO/testing/$curmaj ]]; then
-        mkdir -p "$EPELREPO/testing/$curmaj"
-    fi
-
-    # Sync current epel-testing repository
-    say 'Beginning sync of current EPEL %s Testing repository from %s.' \
-        "$curmaj" "$EPELHOST"
-    rsync $ROPTS $epelex "$EPELHOST/testing/$curmaj/" "$EPELREPO/testing/$curmaj/"
-    say 'Done.\n'
+        # Sync epel repository
+        say 'Beginning sync of EPEL %s repository from %s.' "$repo" "$EPELHOST"
+        rsync $ROPTS $epelex "$EPELHOST/$repo/" "$EPELREPO/$repo/"
+        say 'Done.\n'
+    done
 
     return 0
 }
@@ -334,20 +269,12 @@ ubuntu_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for ubuntu release directory
-    if [[ ! -d $UBUNTUREPO ]]; then
-        mkdir -p "$UBUNTUREPO"
-    fi
+    [[ -d $UBUNTUREPO ]] || mkdir -p "$UBUNTUREPO"
 
-    # Sync older ubuntu repository
-    say 'Beginning sync of legacy Ubuntu %s repository from %s.' \
-        "${ubupre^}" "$UBUNTUHOST"
-    $dmirror"$ROPTS" $ubuntuopts1 $UBUNTUREPO | tee -a $PROGFILE
-    say 'Done.\n'
-
-    # Sync current ubuntu repository
-    say 'Beginning sync of current Ubuntu %s repository from %s.' \
-        "${ubucur^}" "$UBUNTUHOST"
-    $dmirror"$ROPTS" $ubuntuopts2 $UBUNTUREPO | tee -a $PROGFILE
+    # Sync ubuntu repository
+    say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
+        "${ubupre^}" "${ubucur^}" "$UBUNTUHOST"
+    $dmirror2 $ubuntuopts $UBUNTUREPO &>> $PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -358,20 +285,12 @@ debian_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for debian release directory
-    if [[ ! -d $DEBIANREPO ]]; then
-        mkdir -p "$DEBIANREPO"
-    fi
+    [[ -d $DEBIANREPO ]] || mkdir -p "$DEBIANREPO"
 
-    # Sync older debian repository
-    say 'Beginning sync of legacy Debian %s repository from %s.' \
-        "${debpre^}" "$DEBIANHOST"
-    $dmirror"$ROPTS" $debianopts1 $DEBIANREPO | tee -a $PROGFILE
-    say 'Done.\n'
-
-    # Sync current debian repository
-    say 'Beginning sync of current Debian %s repository from %s.' \
-        "${debcur^}" "$DEBIANHOST"
-    $dmirror"$ROPTS" $debianopts2 $DEBIANREPO | tee -a $PROGFILE
+    # Sync debian repository
+    say 'Beginning sync of Debian %s and %s repositories from %s.' \
+        "${debpre^}" "${debcur^}" "$DEBIANHOST"
+    $dmirror2 $debianopts $DEBIANREPO &>> $PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -381,21 +300,13 @@ debian_sync() {
 debsec_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
-    # Check for ubuntu release directory
-    if [[ ! -d $DEBIANREPO ]]; then
-        mkdir -p "$DEBIANREPO"
-    fi
+    # Check for debian security release directory
+    [[ -d $DEBSECREPO ]] || mkdir -p "$DEBSECREPO"
 
-    # Sync older debian security repository
-    say 'Beginning sync of legacy Debian %s Security repository from %s.' \
-        "${debpre^}" "$DEBSECHOST"
-    $dmirror2 $debsecopts1 $DEBSECREPO &>> $PROGFILE
-    say 'Done.\n'
-
-    # Sync current debian security repository
-    say 'Beginning sync of current Debian %s Security repository from %s.' \
-        "${debcur^}" "$DEBSECHOST"
-    $dmirror2 $debsecopts2 $DEBSECREPO &>> $PROGFILE
+    # Sync debian security repository
+    say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
+        "${debpre^}" "${debcur^}" "$DEBSECHOST"
+    $dmirror2 $debsecopts $DEBSECREPO &>> $PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -406,13 +317,11 @@ sonion_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for ubuntu release directory
-    if [[ ! -d $SONIONREPO ]]; then
-        mkdir -p "$SONIONREPO"
-    fi
+    [[ -d $SONIONREPO ]] || mkdir -p "$SONIONREPO"
 
     # Sync security onion repository
-    say 'Beginning sync of Security Onion %s repository from %s.' \
-        "${ubucur^}" "$SONIONHOST"
+    say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
+        "${ubupre^}" "${ubucur^}" "$SONIONHOST"
     $dmirror2 $sonionopts $SONIONREPO &>> $PROGFILE
     say 'Done.\n'
 
@@ -422,9 +331,7 @@ sonion_sync() {
 
 clamav_sync() {
     # Check for clamav release directory
-    if [[ ! -d $CLAMREPO ]]; then
-        mkdir -p "$CLAMREPO"
-    fi
+    [[ -d $CLAMREPO ]] || mkdir -p "$CLAMREPO"
 
     # Sync clamav repository
     say 'Beginning sync of ClamAV repository from %s.' "$CMIRROR"
@@ -434,16 +341,35 @@ clamav_sync() {
     return 0
 }
 
-local_sync() {
-    # Check for local repository directory
-    if [[ ! -d $LOCALREPO ]]; then
-        mkdir -p "$LOCALREPO"
-    fi
+ds_sync() {
+    say 'Configured as downstream, so mirroring local upstream.'
 
-    # Sync local repository
-    say 'Beginning sync of local repository from %s.' "$MIRROR"
-    rsync $ROPTS $centex "$LOCALHOST/" "$LOCALREPO/"
-    say 'Done.\n'
+    [[ -n $UMIRROR ]] || {
+        say err 'UMIRROR is empty or not set.'; exit 14; }
+
+    # Build array of repos to sync downstream
+    [[ $CENTOS_SYNC == true ]] && PACKAGES+=( centos )
+    [[ $EPEL_SYNC   == true ]] && PACKAGES+=( fedora-epel )
+    [[ $UBUNTU_SYNC == true ]] && PACKAGES+=( ubuntu )
+    [[ $DEBIAN_SYNC == true ]] && PACKAGES+=( debian )
+    [[ $DEBSEC_SYNC == true ]] && PACKAGES+=( debian-security )
+    [[ $SONION_SYNC == true ]] && PACKAGES+=( securityonion )
+    [[ $CLAMAV_SYNC == true ]] && PACKAGES+=( clamav )
+    [[ $LOCAL_SYNC  == true ]] && PACKAGES+=( local )
+
+    [[ -n ${PACKAGES[*]} ]] || {
+        say err 'No repos enabled for sync.'; exit 15; }
+
+    # For every enabled repo
+    for repo in "${PACKAGES[@]}"; do
+        # Check for local repository directory
+        [[ -d $REPODIR/$repo ]] || mkdir -p "$REPODIR/$repo"
+
+        # Sync the upstream repository
+        say 'Beginning sync of %s repository from %s.' "$repo" "$UMIRROR"
+        rsync $ROPTS "${UMIRROR}::$repo/" "$REPODIR/$repo/"
+        say 'Done.\n'
+    done
 
     return 0
 }
@@ -465,17 +391,17 @@ main() {
     if [[ -f $LOCKFILE ]]; then
         say err 'Detected lockfile: %s' "$LOCKFILE"
         say err 'Repository updates are already running.'
-        exit 10
+        exit 11
 
     # Check that we can reach the public mirror
     elif ! rsync ${MIRROR}:: &> /dev/null; then
         say err 'Cannot reach the %s mirror server.' "$MIRROR"
-        exit 20
+        exit 12
 
     # Check that the repository is mounted
-    elif ! mount | grep $REPODIR &> /dev/null; then
+    elif ! mount | grep "$REPODIR" &> /dev/null; then
         say err 'Directory %s is not mounted.' "$REPODIR"
-        exit 30
+        exit 13
 
     # Everything is good, let's continue
     else
@@ -486,7 +412,8 @@ main() {
         build_vars
 
         # Are we upstream?
-        [[ $UPSTREAM   == false ]] && MIRROR=$UMIRROR
+        [[ $UPSTREAM    == true ]] || {
+            UMIRROR=${UMIRROR:=$MIRROR} && ds_sync; }
 
         # Sync CentOS repo
         [[ $CENTOS_SYNC == true ]] && centos_sync
@@ -514,7 +441,7 @@ main() {
 
         # Fix ownership of files
         say 'Normalizing repository file permissions.'
-        chown -R root:www-data $REPODIR
+        chown -R root:www-data "$REPODIR"
 
         # Clear the lockfile
         rm -f "$LOCKFILE"
