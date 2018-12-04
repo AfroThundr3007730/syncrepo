@@ -4,13 +4,13 @@
 # This script can sync the repos listed in $SOFTWARE
 
 # Gotta keep the namespace clean
-set_globals () {
+set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
-    MODIFIED='20181029'
-    VERSION='1.7.0-rc1'
+    MODIFIED='20181203'
+    VERSION='1.7.0-rc2-us'
 
-    SOFTWARE='CentOS, EPEL, Debian, Ubuntu, and ClamAV'
+    SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, and ClamAV'
 
     # Global config variables (modify as necessary)
     UPSTREAM=true
@@ -20,12 +20,13 @@ set_globals () {
     DEBSEC_SYNC=true
     UBUNTU_SYNC=true
     CLAMAV_SYNC=true
-    LOCAL_SYNC=true
+    SONION_SYNC=true
+    LOCAL_SYNC=false
 
     REPODIR=/srv/repository
-    LOCKFILE=/var/lock/subsys/reposync
-    LOGFILE=/var/log/reposync.log
-    PROGFILE=/var/log/reposync_progress.log
+    LOCKFILE=/var/lock/subsys/syncrepo
+    LOGFILE=/var/log/syncrepo.log
+    PROGFILE=/var/log/syncrepo_progress.log
 
     # More internal config variables
     MIRROR=mirrors.mit.edu
@@ -46,6 +47,10 @@ set_globals () {
     DEBSECREPO=${REPODIR}/debian-security
     DEBSECHOST=${SMIRROR}/
 
+    SOMIRROR=ppa.launchpad.net
+    SONIONREPO=${REPODIR}/securityonion
+    SONIONHOST=${SOMIRROR}/securityonion
+
     CMIRROR=database.clamav.net
     CLAMREPO=${REPODIR}/clamav
 
@@ -57,7 +62,7 @@ set_globals () {
 }
 
 # Parse command line options
-argument_handler () {
+argument_handler() {
     if [[ ! -n $1 ]]; then
         say -h 'No arguments specified, use -h for help.'
         exit 0
@@ -110,7 +115,8 @@ argument_handler () {
 
 # Log message and print to stdout
 # shellcheck disable=SC2059
-say () {
+say() {
+    export TERM=${TERM:=xterm}
     if [[ $1 == -h ]]; then
         shift; local s=$1; shift
         tput setaf 2; printf "$s\\n" "$@"
@@ -124,7 +130,7 @@ say () {
         if [[ $1 == info || $1 == warn || $1 == err ]]; then
             [[ $1 == info ]] && tput setaf 4
             [[ $1 == warn ]] && tput setaf 3
-            [[ $1 == err ]] && tput setaf 1
+            [[ $1 == err  ]] && tput setaf 1
             local l=${1^^}; shift
             local s="$l: $1"; shift
         else
@@ -140,7 +146,7 @@ say () {
 }
 
 # Construct the sync environment
-build_vars () {
+build_vars() {
     # Declare more variables (CentOS/EPEL)
     if [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]]; then
         mapfile -t allrels <<< "$(
@@ -167,7 +173,7 @@ build_vars () {
     fi
 
     # Declare more variables (Debian/Ubuntu)
-    if [[ $UBUNTU_SYNC == true ]]; then
+    if [[ $UBUNTU_SYNC == true || $SONION_SYNC == true ]]; then
         mapfile -t uburels <<< "$(
             curl -sL $MIRROR/ubuntu-releases/HEADER.html |
             awk -F '[() ]' '/<li>/ && /LTS/ {print $6}'
@@ -180,6 +186,8 @@ build_vars () {
         ubunturel2="$ubucur,$ubucur-backports,$ubucur-updates,$ubucur-proposed,$ubucur-security"
         ubuntuopts1="-s $ubuntucomps -d $ubunturel1 -h $MIRROR -r /ubuntu"
         ubuntuopts2="-s $ubuntucomps -d $ubunturel2 -h $MIRROR -r /ubuntu"
+
+        sonionopts="s main -d $ubucur -h $SOMIRROR --rsync-extras=none -r /securityonion/stable/ubuntu"
     fi
 
     if [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
@@ -202,7 +210,7 @@ build_vars () {
         debsecopts2="-s $debiancomps -d $debsecrel2 -h $SMIRROR -r /"
     fi
 
-    if [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
+    if [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true || $DEBSEC_SYNC == true || $SONION_SYNC == true ]]; then
         dmirror="debmirror -a $DEBARCH --no-source --ignore-small-errors --method=rsync --retry-rsync-packages=5 -p --rsync-options="
         dmirror2="debmirror -a $DEBARCH --no-source --ignore-small-errors --method=http --checksums -p"
     fi
@@ -215,7 +223,7 @@ build_vars () {
     return 0
 }
 
-centos_sync () {
+centos_sync() {
     # Check for older centos release directory
     if [[ ! -d $CENTREPO/$oldrel ]]; then
         mkdir -p "$CENTREPO/$oldrel"
@@ -274,7 +282,7 @@ centos_sync () {
     return 0
 }
 
-epel_sync () {
+epel_sync() {
     # Check for older epel release directory
     if [[ ! -d $EPELREPO/$oldmaj ]]; then
         mkdir -p "$EPELREPO/$oldmaj"
@@ -322,7 +330,7 @@ epel_sync () {
     return 0
 }
 
-ubuntu_sync () {
+ubuntu_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for ubuntu release directory
@@ -346,7 +354,7 @@ ubuntu_sync () {
     return 0
 }
 
-debian_sync () {
+debian_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for debian release directory
@@ -370,7 +378,7 @@ debian_sync () {
     return 0
 }
 
-debsec_sync () {
+debsec_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for ubuntu release directory
@@ -394,7 +402,25 @@ debsec_sync () {
     return 0
 }
 
-clamav_sync () {
+sonion_sync() {
+    export GNUPGHOME=$REPODIR/.gpg
+
+    # Check for ubuntu release directory
+    if [[ ! -d $SONIONREPO ]]; then
+        mkdir -p "$SONIONREPO"
+    fi
+
+    # Sync security onion repository
+    say 'Beginning sync of Security Onion %s repository from %s.' \
+        "${ubucur^}" "$SONIONHOST"
+    $dmirror2 $sonionopts $SONIONREPO &>> $PROGFILE
+    say 'Done.\n'
+
+    unset GNUPGHOME
+    return 0
+}
+
+clamav_sync() {
     # Check for clamav release directory
     if [[ ! -d $CLAMREPO ]]; then
         mkdir -p "$CLAMREPO"
@@ -408,7 +434,7 @@ clamav_sync () {
     return 0
 }
 
-local_sync () {
+local_sync() {
     # Check for local repository directory
     if [[ ! -d $LOCALREPO ]]; then
         mkdir -p "$LOCALREPO"
@@ -423,12 +449,12 @@ local_sync () {
 }
 
 # Where the magic happens
-main () {
-    # Process arguments
-    argument_handler "$@"
-
+main() {
     # Set Globals
     set_globals
+
+    # Process arguments
+    argument_handler "$@"
 
     # Here we go...
     say -t 'Progress log reset.'
@@ -442,7 +468,7 @@ main () {
         exit 10
 
     # Check that we can reach the public mirror
-    elif ! ping -c 5 $MIRROR &> /dev/null; then
+    elif ! rsync ${MIRROR}:: &> /dev/null; then
         say err 'Cannot reach the %s mirror server.' "$MIRROR"
         exit 20
 
@@ -460,13 +486,13 @@ main () {
         build_vars
 
         # Are we upstream?
-        [[ $UPSTREAM == false ]] && MIRROR="$UMIRROR"
+        [[ $UPSTREAM   == false ]] && MIRROR=$UMIRROR
 
         # Sync CentOS repo
         [[ $CENTOS_SYNC == true ]] && centos_sync
 
         # Sync EPEL repo
-        [[ $EPEL_SYNC == true ]] && epel_sync
+        [[ $EPEL_SYNC   == true ]] && epel_sync
 
         # Sync Ubuntu repo
         [[ $UBUNTU_SYNC == true ]] && ubuntu_sync
@@ -480,8 +506,15 @@ main () {
         # Sync Clamav reop
         [[ $CLAMAV_SYNC == true ]] && clamav_sync
 
+        # Sync Security Onion reop
+        [[ $SONION_SYNC == true ]] && clamav_sync
+
         # Sync Local repo
-        [[ $LOCAL_SYNC == true ]] && local_sync
+        [[ $LOCAL_SYNC  == true ]] && local_sync
+
+        # Fix ownership of files
+        say 'Normalizing repository file permissions.'
+        chown -R root:www-data $REPODIR
 
         # Clear the lockfile
         rm -f "$LOCKFILE"
