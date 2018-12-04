@@ -1,5 +1,5 @@
 #!/bin/bash
-## shellcheck disable=SC2086
+# shellcheck disable=SC2086
 # Repository sync script for CentOS & Debian distros
 # This script can sync the repos listed in $SOFTWARE
 
@@ -7,8 +7,8 @@
 set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
-    MODIFIED='20181203'
-    VERSION='1.7.0-rc3'
+    MODIFIED='20181204'
+    VERSION='1.7.0-rc4'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, and ClamAV'
 
@@ -19,8 +19,8 @@ set_globals() {
     DEBIAN_SYNC=true
     DEBSEC_SYNC=true
     UBUNTU_SYNC=true
-    CLAMAV_SYNC=true
     SONION_SYNC=true
+    CLAMAV_SYNC=true
     LOCAL_SYNC=true
 
     REPODIR=/srv/repository
@@ -60,10 +60,8 @@ set_globals() {
 
 # Parse command line options
 argument_handler() {
-    if [[ ! -n $1 ]]; then
-        say -h 'No arguments specified, use -h for help.'
-        exit 10
-    fi
+    [[ -n $1 ]] || {
+        say -h 'No arguments specified, use -h for help.'; exit 10; }
 
     while [[ -n $1 ]]; do
         if [[ $1 == -v ]]; then
@@ -103,19 +101,15 @@ argument_handler() {
         fi
     done
 
-    if [[ ! $CONFIRM == true ]]; then
-        if [[ ! $ver == true ]]; then
-            say -h 'Confirm with -y to start the sync.'
-            exit 10
-        fi
-        exit 0
-    fi
+    [[ $CONFIRM == true ]] || {
+        [[ $ver == true ]] || {
+            say -h 'Confirm with -y to start the sync.'; exit 10; }; exit 0; }
 }
 
 # Log message and print to stdout
 # shellcheck disable=SC2059
 say() {
-    [[ -n $TERM ]] && export TERM=xterm
+    [[ -n $TERM ]] || export TERM=xterm
     if [[ $1 == -h ]]; then
         shift; local s=$1; shift
         tput setaf 2; printf "$s\\n" "$@"
@@ -144,10 +138,23 @@ say() {
     tput setaf 7 # For CentOS
 }
 
+# Record time duration, concurrent timers
+timer() {
+    [[ $1 =~ ^[0-9]+$ ]] && { local i=$1; shift; }
+    [[ -n $1 ]] || say -n err 'No timer action specified.'
+    [[ $1 == start ]] && tstart[$i]=$SECONDS
+    [[ $1 == stop  ]] && {
+        [[ -n ${tstart[$l]} ]] || say -n err 'Timer %s not started.' "$i"
+        tstop[$i]=$SECONDS; duration[$i]=$(( tstop[i] - tstart[i] ))
+    }
+    [[ $1 == show ]] && echo ${duration[$i]}
+    return 0
+}
+
 # Construct the sync environment
 build_vars() {
     # Declare more variables (CentOS/EPEL)
-    if [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]]; then
+    [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]] && {
         mapfile -t allrels <<< "$(
             rsync $CENTHOST |
             awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
@@ -165,12 +172,14 @@ build_vars() {
         oldmaj=${oldrel%%.*}
         oprerel=${oldrels[-2]}
 
-        centex=$(echo --include={os,extras,updates,centosplus,readme,os/$CENTARCH/{repodata,Packages}} --exclude={i386,"os/$CENTARCH/*"} --exclude="/*")
+        centex=$(echo \
+            --include={os,extras,updates,centosplus,readme,os/$CENTARCH/{repodata,Packages}} \
+            --exclude={i386,"os/$CENTARCH/*"} --exclude="/*")
         epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$CENTARCH/debug})
-    fi
+    }
 
     # Declare more variables (Debian/Ubuntu)
-    if [[ $UBUNTU_SYNC == true || $SONION_SYNC == true ]]; then
+    [[ $UBUNTU_SYNC == true || $SONION_SYNC == true ]] && {
         mapfile -t uburels <<< "$(
             curl -sL $MIRROR/ubuntu-releases/HEADER.html |
             awk -F '[() ]' '/<li>/ && /LTS/ {print $6}'
@@ -183,10 +192,11 @@ build_vars() {
         ubunturel2="$ubucur,$ubucur-backports,$ubucur-updates,$ubucur-proposed,$ubucur-security"
         ubuntuopts="-s $ubuntucomps -d $ubunturel1 -d $ubunturel2 -h $MIRROR -r /ubuntu"
 
-        sonionopts="s main -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extras=none -r /securityonion/stable/ubuntu"
-    fi
+        sonionopts="-s main -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extras=none"
+        sonionopts+=" -r /securityonion/stable/ubuntu"
+    }
 
-    if [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]]; then
+    [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]] && {
         mapfile -t debrels <<< "$(
             curl -sL $MIRROR/debian/README.html |
             awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
@@ -202,17 +212,19 @@ build_vars() {
         debsecrel1="$debpre/updates"
         debsecrel2="$debcur/updates"
         debsecopts="-s $debiancomps -d $debsecrel1 -d $debsecrel2 -h $SMIRROR -r /"
-    fi
+    }
 
-    if [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true || $DEBSEC_SYNC == true || $SONION_SYNC == true ]]; then
-        dmirror="debmirror -a $DEBARCH --no-source --ignore-small-errors --method=rsync --retry-rsync-packages=5 -p --rsync-options="
-        dmirror2="debmirror -a $DEBARCH --no-source --ignore-small-errors --method=http --checksums -p"
-    fi
+    [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true ||
+       $DEBSEC_SYNC == true || $SONION_SYNC == true ]] && {
+        dmirror1="debmirror -a $DEBARCH --no-source --ignore-small-errors"
+        dmirror1+=" --method=rsync --retry-rsync-packages=5 -p --rsync-options="
+        dmirror2="debmirror -a $DEBARCH --no-source --ignore-small-errors"
+        dmirror2+=" --method=http --checksums -p"
+    }
 
     # And a few more (ClamAV)
-    if [[ $CLAMAV_SYNC == true ]]; then
+    [[ $CLAMAV_SYNC == true ]] &&
         clamsync="clamavmirror -a $CMIRROR -d $CLAMREPO -u root -g www-data"
-    fi
 
     return 0
 }
@@ -386,6 +398,7 @@ main() {
     say -t 'Progress log reset.'
     say 'Started synchronization of %s repositories.' "$SOFTWARE"
     say 'Use tail -f %s to view progress.' "$PROGFILE"
+    timer start
 
     # Check if the rsync script is already running
     if [[ -f $LOCKFILE ]]; then
@@ -394,7 +407,9 @@ main() {
         exit 11
 
     # Check that we can reach the public mirror
-    elif ! rsync ${MIRROR}:: &> /dev/null; then
+    elif [[ $UPSTREAM == true ]] &&
+         ! rsync ${MIRROR}:: &> /dev/null ||
+         ! rsync ${UMIRROR}:: &> /dev/null; then
         say err 'Cannot reach the %s mirror server.' "$MIRROR"
         exit 12
 
@@ -412,32 +427,34 @@ main() {
         build_vars
 
         # Are we upstream?
-        [[ $UPSTREAM    == true ]] || {
-            UMIRROR=${UMIRROR:=$MIRROR} && ds_sync; }
+        if [[ $UPSTREAM == true ]]; then
+            # Sync CentOS repo
+            [[ $CENTOS_SYNC == true ]] && centos_sync
 
-        # Sync CentOS repo
-        [[ $CENTOS_SYNC == true ]] && centos_sync
+            # Sync EPEL repo
+            [[ $EPEL_SYNC   == true ]] && epel_sync
 
-        # Sync EPEL repo
-        [[ $EPEL_SYNC   == true ]] && epel_sync
+            # Sync Ubuntu repo
+            [[ $UBUNTU_SYNC == true ]] && ubuntu_sync
 
-        # Sync Ubuntu repo
-        [[ $UBUNTU_SYNC == true ]] && ubuntu_sync
+            # Sync Debian repo
+            [[ $DEBIAN_SYNC == true ]] && debian_sync
 
-        # Sync Debian repo
-        [[ $DEBIAN_SYNC == true ]] && debian_sync
+            # Sync Debian Security repo
+            [[ $DEBSEC_SYNC == true ]] && debsec_sync
 
-        # Sync Debian Security repo
-        [[ $DEBSEC_SYNC == true ]] && debsec_sync
+            # Sync Security Onion reop
+            [[ $SONION_SYNC == true ]] && sonion_sync
 
-        # Sync Clamav reop
-        [[ $CLAMAV_SYNC == true ]] && clamav_sync
+            # Sync Clamav reop
+            [[ $CLAMAV_SYNC == true ]] && clamav_sync
 
-        # Sync Security Onion reop
-        [[ $SONION_SYNC == true ]] && clamav_sync
-
-        # Sync Local repo
-        [[ $LOCAL_SYNC  == true ]] && local_sync
+            # Sync Local repo
+            [[ $LOCAL_SYNC  == true ]] && local_sync
+        else
+            # Do a downstream sync
+            UMIRROR=${UMIRROR:=$MIRROR} && ds_sync
+        fi
 
         # Fix ownership of files
         say 'Normalizing repository file permissions.'
@@ -448,7 +465,8 @@ main() {
     fi
 
     # Now we're done
-    say 'Completed synchronization of %s repositories.\n' "$SOFTWARE"
+    say 'Completed synchronization of %s repositories.' "$SOFTWARE"
+    timer stop; say 'Total duration: %d seconds.\n' "$(timer show)"
     exit 0
 }
 
