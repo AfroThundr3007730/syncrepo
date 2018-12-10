@@ -3,14 +3,17 @@
 # Repository sync script for CentOS & Debian distros
 # This script can sync the repos listed in $SOFTWARE
 
+# TODO: Note to self, since I probably forgot again:
+#   Don't truncate the variable names, spell em out.
+
 # Gotta keep the namespace clean
 set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
     MODIFIED='20181204'
-    VERSION='1.7.0-rc4'
+    VERSION='1.7.0-rc5'
 
-    SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, and ClamAV'
+    SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, Docker, and ClamAV'
 
     # Global config variables (modify as necessary)
     UPSTREAM=true
@@ -20,6 +23,7 @@ set_globals() {
     DEBSEC_SYNC=true
     UBUNTU_SYNC=true
     SONION_SYNC=true
+    DOCKER_SYNC=true
     CLAMAV_SYNC=true
     LOCAL_SYNC=true
 
@@ -31,6 +35,7 @@ set_globals() {
     # More internal config variables
     MIRROR=mirrors.mit.edu
     UMIRROR=mirror-us.lab.local
+
     CENTARCH=x86_64
     CENTREPO=${REPODIR}/centos
     CENTHOST=${MIRROR}::centos
@@ -45,11 +50,12 @@ set_globals() {
 
     SMIRROR=security.debian.org
     DEBSECREPO=${REPODIR}/debian-security
-    DEBSECHOST=${SMIRROR}/
 
     SOMIRROR=ppa.launchpad.net
     SONIONREPO=${REPODIR}/securityonion
-    SONIONHOST=${SOMIRROR}/securityonion
+
+    DMIRROR=download.docker.com
+    DOCKERREPO=${REPODIR}/docker
 
     CMIRROR=database.clamav.net
     CLAMREPO=${REPODIR}/clamav
@@ -140,14 +146,19 @@ say() {
 
 # Record time duration, concurrent timers
 timer() {
-    [[ $1 =~ ^[0-9]+$ ]] && { local i=$1; shift; }
+    [[ $1 =~ ^[0-9]+$ ]] && {
+        [[ $n -gt $1 ]] || n=$1; local i=$1; shift; }
+    [[ $1 == -n ]] && { n=$(( n + 1 )); shift; }
+    [[ $1 == -p ]] && { n=$(( n - 1 )); shift; }
+    [[ $1 == -c ]] && { local i=$n; shift; }
     [[ -n $1 ]] || say -n err 'No timer action specified.'
     [[ $1 == start ]] && tstart[$i]=$SECONDS
     [[ $1 == stop  ]] && {
-        [[ -n ${tstart[$l]} ]] || say -n err 'Timer %s not started.' "$i"
-        tstop[$i]=$SECONDS; duration[$i]=$(( tstop[i] - tstart[i] ))
-    }
-    [[ $1 == show ]] && echo ${duration[$i]}
+        [[ -n ${tstart[$i]} ]] || say -n err 'Timer %s not started.' "$i"
+        tstop[$i]=$SECONDS; duration[$i]=$(( tstop[i] - tstart[i] )); }
+    [[ $1 == show ]] && {
+        [[ -n ${tstop[$i]} ]] || duration[$i]=$(( SECONDS - tstart[i] ))
+        echo ${duration[$i]}; }
     return 0
 }
 
@@ -179,7 +190,7 @@ build_vars() {
     }
 
     # Declare more variables (Debian/Ubuntu)
-    [[ $UBUNTU_SYNC == true || $SONION_SYNC == true ]] && {
+    [[ $UBUNTU_SYNC == true || $SONION_SYNC == true || $DOCKER_SYNC == true ]] && {
         mapfile -t uburels <<< "$(
             curl -sL $MIRROR/ubuntu-releases/HEADER.html |
             awk -F '[() ]' '/<li>/ && /LTS/ {print $6}'
@@ -192,8 +203,11 @@ build_vars() {
         ubunturel2="$ubucur,$ubucur-backports,$ubucur-updates,$ubucur-proposed,$ubucur-security"
         ubuntuopts="-s $ubuntucomps -d $ubunturel1 -d $ubunturel2 -h $MIRROR -r /ubuntu"
 
-        sonionopts="-s main -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extras=none"
+        sonionopts="-s main -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extra=none"
         sonionopts+=" -r /securityonion/stable/ubuntu"
+
+        dockeropts="-s stable -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extra=none"
+        dockeropts+=" -r /linux/ubuntu"
     }
 
     [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]] && {
@@ -215,11 +229,13 @@ build_vars() {
     }
 
     [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true ||
-       $DEBSEC_SYNC == true || $SONION_SYNC == true ]] && {
+       $DEBSEC_SYNC == true || $SONION_SYNC == true || $DOCKER_SYNC == true ]] && {
         dmirror1="debmirror -a $DEBARCH --no-source --ignore-small-errors"
         dmirror1+=" --method=rsync --retry-rsync-packages=5 -p --rsync-options="
         dmirror2="debmirror -a $DEBARCH --no-source --ignore-small-errors"
         dmirror2+=" --method=http --checksums -p"
+        dmirror3="debmirror -a $DEBARCH --no-source --ignore-small-errors"
+        dmirror3+=" --method=https --checksums -p"
     }
 
     # And a few more (ClamAV)
@@ -239,11 +255,11 @@ centos_sync() {
             "$repo" "$CENTHOST"
         rsync $ROPTS $centex "$CENTHOST/$repo/" "$CENTREPO/$repo/"
         say 'Done.\n'
-    done
 
-    # Create the symlink, or move, if necessary
-    [[ -L ${repo%%.*} && $(readlink "${repo%%.*}") == "$repo" ]] ||
-        ln -frs "$CENTREPO/$repo" "$CENTREPO/${repo%%.*}"
+        # Create the symlink, or move, if necessary
+        [[ -L ${repo%%.*} && $(readlink "${repo%%.*}") == "$repo" ]] ||
+            ln -frs "$CENTREPO/$repo" "$CENTREPO/${repo%%.*}"
+    done
 
     # Continue to sync previous point releases til they're empty
     for repo in $oprerel $cprerel; do
@@ -280,7 +296,7 @@ epel_sync() {
 ubuntu_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
-    # Check for ubuntu release directory
+    # Check for ubuntu directory
     [[ -d $UBUNTUREPO ]] || mkdir -p "$UBUNTUREPO"
 
     # Sync ubuntu repository
@@ -296,7 +312,7 @@ ubuntu_sync() {
 debian_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
-    # Check for debian release directory
+    # Check for debian directory
     [[ -d $DEBIANREPO ]] || mkdir -p "$DEBIANREPO"
 
     # Sync debian repository
@@ -312,12 +328,12 @@ debian_sync() {
 debsec_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
-    # Check for debian security release directory
+    # Check for debian security directory
     [[ -d $DEBSECREPO ]] || mkdir -p "$DEBSECREPO"
 
     # Sync debian security repository
     say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
-        "${debpre^}" "${debcur^}" "$DEBSECHOST"
+        "${debpre^}" "${debcur^}" "$SMIRROR"
     $dmirror2 $debsecopts $DEBSECREPO &>> $PROGFILE
     say 'Done.\n'
 
@@ -328,12 +344,12 @@ debsec_sync() {
 sonion_sync() {
     export GNUPGHOME=$REPODIR/.gpg
 
-    # Check for ubuntu release directory
+    # Check for security onion directory
     [[ -d $SONIONREPO ]] || mkdir -p "$SONIONREPO"
 
     # Sync security onion repository
     say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
-        "${ubupre^}" "${ubucur^}" "$SONIONHOST"
+        "${ubupre^}" "${ubucur^}" "$SOMIRROR"
     $dmirror2 $sonionopts $SONIONREPO &>> $PROGFILE
     say 'Done.\n'
 
@@ -341,8 +357,25 @@ sonion_sync() {
     return 0
 }
 
+docker_sync() {
+    # TODO: Shoud probably add sync for debian and centos too
+    export GNUPGHOME=$REPODIR/.gpg
+
+    # Check for docker directory
+    [[ -d $DOCKERREPO ]] || mkdir -p "$DOCKERREPO"
+
+    # Sync docker repository
+    say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
+        "${ubupre^}" "${ubucur^}" "$DMIRROR"
+    $dmirror3 $dockeropts $DOCKERREPO &>> $PROGFILE
+    say 'Done.\n'
+
+    unset GNUPGHOME
+    return 0
+}
+
 clamav_sync() {
-    # Check for clamav release directory
+    # Check for clamav directory
     [[ -d $CLAMREPO ]] || mkdir -p "$CLAMREPO"
 
     # Sync clamav repository
@@ -366,6 +399,7 @@ ds_sync() {
     [[ $DEBIAN_SYNC == true ]] && PACKAGES+=( debian )
     [[ $DEBSEC_SYNC == true ]] && PACKAGES+=( debian-security )
     [[ $SONION_SYNC == true ]] && PACKAGES+=( securityonion )
+    [[ $DOCKER_SYNC == true ]] && PACKAGES+=( docker )
     [[ $CLAMAV_SYNC == true ]] && PACKAGES+=( clamav )
     [[ $LOCAL_SYNC  == true ]] && PACKAGES+=( local )
 
@@ -407,9 +441,8 @@ main() {
         exit 11
 
     # Check that we can reach the public mirror
-    elif [[ $UPSTREAM == true ]] &&
-         ! rsync ${MIRROR}:: &> /dev/null ||
-         ! rsync ${UMIRROR}:: &> /dev/null; then
+    elif ( [[ $UPSTREAM == true ]] && ! rsync ${MIRROR}:: &> /dev/null ) ||
+         ( [[ $UPSTREAM == false ]] && ! rsync ${UMIRROR}:: &> /dev/null ); then
         say err 'Cannot reach the %s mirror server.' "$MIRROR"
         exit 12
 
@@ -428,28 +461,15 @@ main() {
 
         # Are we upstream?
         if [[ $UPSTREAM == true ]]; then
-            # Sync CentOS repo
+            # Sync every enabled repo
             [[ $CENTOS_SYNC == true ]] && centos_sync
-
-            # Sync EPEL repo
             [[ $EPEL_SYNC   == true ]] && epel_sync
-
-            # Sync Ubuntu repo
             [[ $UBUNTU_SYNC == true ]] && ubuntu_sync
-
-            # Sync Debian repo
             [[ $DEBIAN_SYNC == true ]] && debian_sync
-
-            # Sync Debian Security repo
             [[ $DEBSEC_SYNC == true ]] && debsec_sync
-
-            # Sync Security Onion reop
             [[ $SONION_SYNC == true ]] && sonion_sync
-
-            # Sync Clamav reop
+            [[ $DOCKER_SYNC == true ]] && docker_sync
             [[ $CLAMAV_SYNC == true ]] && clamav_sync
-
-            # Sync Local repo
             [[ $LOCAL_SYNC  == true ]] && local_sync
         else
             # Do a downstream sync
@@ -465,8 +485,10 @@ main() {
     fi
 
     # Now we're done
+    timer stop
     say 'Completed synchronization of %s repositories.' "$SOFTWARE"
-    timer stop; say 'Total duration: %d seconds.\n' "$(timer show)"
+    say 'Total duration: %d seconds. Current repository size: %s.\n' \
+        "$(timer show)" "$(du -hds $REPODIR)"
     exit 0
 }
 
