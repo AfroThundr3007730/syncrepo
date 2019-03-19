@@ -11,7 +11,7 @@ set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
     MODIFIED='20181204'
-    VERSION='1.7.0-rc5'
+    VERSION='1.7.0-rc6'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, Docker, and ClamAV'
 
@@ -115,7 +115,7 @@ argument_handler() {
 # Log message and print to stdout
 # shellcheck disable=SC2059
 say() {
-    [[ -n $TERM ]] || export TERM=xterm
+    export TERM=${TERM:=xterm}
     if [[ $1 == -h ]]; then
         shift; local s=$1; shift
         tput setaf 2; printf "$s\\n" "$@"
@@ -165,7 +165,7 @@ timer() {
 # Construct the sync environment
 build_vars() {
     # Declare more variables (CentOS/EPEL)
-    [[ $CENTOS_SYNC == true || $EPEL_SYNC == true ]] && {
+    [[ $CENTOS_SYNC == true || $EPEL_SYNC == true || $DOCKER_SYNC == true ]] && {
         mapfile -t allrels <<< "$(
             rsync $CENTHOST |
             awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
@@ -187,6 +187,9 @@ build_vars() {
             --include={os,extras,updates,centosplus,readme,os/$CENTARCH/{repodata,Packages}} \
             --exclude={i386,"os/$CENTARCH/*"} --exclude="/*")
         epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$CENTARCH/debug})
+
+        dockersync="wget -m -np -N -nH -r --cut-dirs=1 -R 'index.html' -P $REPODIR/docker/"
+        dockersync+=" $DMIRROR/linux/centos/$curmaj/$CENTARCH/stable/"
     }
 
     # Declare more variables (Debian/Ubuntu)
@@ -206,11 +209,11 @@ build_vars() {
         sonionopts="-s main -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extra=none"
         sonionopts+=" -r /securityonion/stable/ubuntu"
 
-        dockeropts="-s stable -d $ubupre -d $ubucur -h $SOMIRROR --rsync-extra=none"
-        dockeropts+=" -r /linux/ubuntu"
+        dockeroptsu="-s stable -d $ubupre -d $ubucur -h $DMIRROR --rsync-extra=none"
+        dockeroptsu+=" -r /linux/ubuntu"
     }
 
-    [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true ]] && {
+    [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true || $DOCKER_SYNC == true ]] && {
         mapfile -t debrels <<< "$(
             curl -sL $MIRROR/debian/README.html |
             awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
@@ -226,6 +229,9 @@ build_vars() {
         debsecrel1="$debpre/updates"
         debsecrel2="$debcur/updates"
         debsecopts="-s $debiancomps -d $debsecrel1 -d $debsecrel2 -h $SMIRROR -r /"
+
+        dockeroptsd="-s stable -d $debpre -d $debcur -h $DMIRROR --rsync-extra=none"
+        dockeroptsd+=" -r /linux/debian"
     }
 
     [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true ||
@@ -358,17 +364,34 @@ sonion_sync() {
 }
 
 docker_sync() {
-    # TODO: Shoud probably add sync for debian and centos too
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for docker directory
     [[ -d $DOCKERREPO ]] || mkdir -p "$DOCKERREPO"
 
-    # Sync docker repository
+    # Sync docker repository (for each enabled OS)
+
+    # TODO: Implement `wget_rsync` method instead of a regular clone
+    [[ $CENTOS_SYNC == true ]] && {
+    say 'Beginning sync of Docker Centos %s repository from %s.' \
+        "${ubucur^}" "$DMIRROR"
+    $dockersync &>> $PROGFILE
+    say 'Done.\n'
+    }
+
+    [[ $UBUNTU_SYNC == true ]] && {
     say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
         "${ubupre^}" "${ubucur^}" "$DMIRROR"
-    $dmirror3 $dockeropts $DOCKERREPO &>> $PROGFILE
+    $dmirror3 ${dockeroptsu} $DOCKERREPO/ubuntu &>> $PROGFILE
     say 'Done.\n'
+    }
+
+    [[ $DEBIAN_SYNC == true ]] && {
+    say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
+        "${debpre^}" "${debcur^}" "$DMIRROR"
+    $dmirror3 ${dockeroptsd} $DOCKERREPO/debian &>> $PROGFILE
+    say 'Done.\n'
+    }
 
     unset GNUPGHOME
     return 0
@@ -456,11 +479,11 @@ main() {
         # There can be only one...
         touch "$LOCKFILE"
 
-        # Generate variables
-        build_vars
-
         # Are we upstream?
         if [[ $UPSTREAM == true ]]; then
+            # Generate variables
+            build_vars
+
             # Sync every enabled repo
             [[ $CENTOS_SYNC == true ]] && centos_sync
             [[ $EPEL_SYNC   == true ]] && epel_sync
@@ -470,7 +493,6 @@ main() {
             [[ $SONION_SYNC == true ]] && sonion_sync
             [[ $DOCKER_SYNC == true ]] && docker_sync
             [[ $CLAMAV_SYNC == true ]] && clamav_sync
-            [[ $LOCAL_SYNC  == true ]] && local_sync
         else
             # Do a downstream sync
             UMIRROR=${UMIRROR:=$MIRROR} && ds_sync
@@ -488,7 +510,7 @@ main() {
     timer stop
     say 'Completed synchronization of %s repositories.' "$SOFTWARE"
     say 'Total duration: %d seconds. Current repository size: %s.\n' \
-        "$(timer show)" "$(du -hds $REPODIR)"
+        "$(timer show)" "$(du -hs $REPODIR | awk '{print $1}')"
     exit 0
 }
 
