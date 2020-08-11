@@ -10,7 +10,7 @@
 set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
-    MODIFIED='20181204'
+    MODIFIED='20191210'
     VERSION='1.7.0-rc6'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, Docker, and ClamAV'
@@ -184,9 +184,9 @@ build_vars() {
         oprerel=${oldrels[-2]}
 
         centex=$(echo \
-            --include={os,extras,updates,centosplus,readme,os/$CENTARCH/{repodata,Packages}} \
-            --exclude={i386,"os/$CENTARCH/*"} --exclude="/*")
-        epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,$CENTARCH/debug})
+            --include={os,BaseOS,AppStream,extras,updates,centosplus,fasttrack,readme,{os/$CENTARCH,{BaseOS,AppStream}/$CENTARCH/os}/{repodata,Packages}} \
+            --exclude={aarch64,i386,ppc64le,{os/$CENTARCH,{BaseOS,AppStream}/$CENTARCH{,/os}}/"*"} --exclude="/*")
+        epelex=$(echo --exclude={SRPMS,aarch64,i386,ppc64,ppc64le,s390x,$CENTARCH/debug})
 
         dockersync="wget -m -np -N -nH -r --cut-dirs=1 -R 'index.html' -P $REPODIR/docker/"
         dockersync+=" $DMIRROR/linux/centos/$curmaj/$CENTARCH/stable/"
@@ -196,10 +196,10 @@ build_vars() {
     [[ $UBUNTU_SYNC == true || $SONION_SYNC == true || $DOCKER_SYNC == true ]] && {
         mapfile -t uburels <<< "$(
             curl -sL $MIRROR/ubuntu-releases/HEADER.html |
-            awk -F '[() ]' '/<li>/ && /LTS/ {print $6}'
+            awk -F '(' '/<li.+>/ && /LTS/ && match($2, /[[:alpha:]]+/, a) {print a[0]}'
         )"
-        ubucur=${uburels[1],}
-        ubupre=${uburels[2],}
+        ubucur=${uburels[0],}
+        ubupre=${uburels[1],}
 
         ubuntucomps="main,restricted,universe,multiverse"
         ubunturel1="$ubupre,$ubupre-backports,$ubupre-updates,$ubupre-proposed,$ubupre-security"
@@ -264,7 +264,7 @@ centos_sync() {
 
         # Create the symlink, or move, if necessary
         [[ -L ${repo%%.*} && $(readlink "${repo%%.*}") == "$repo" ]] ||
-            ln -frs "$CENTREPO/$repo" "$CENTREPO/${repo%%.*}"
+            ln -frsn "$CENTREPO/$repo" "$CENTREPO/${repo%%.*}"
     done
 
     # Continue to sync previous point releases til they're empty
@@ -493,6 +493,7 @@ main() {
             [[ $SONION_SYNC == true ]] && sonion_sync
             [[ $DOCKER_SYNC == true ]] && docker_sync
             [[ $CLAMAV_SYNC == true ]] && clamav_sync
+            [[ $LOCAL_SYNC  == true ]] && local_sync
         else
             # Do a downstream sync
             UMIRROR=${UMIRROR:=$MIRROR} && ds_sync
@@ -516,3 +517,4 @@ main() {
 
 # Only execute if not being sourced
 [[ ${BASH_SOURCE[0]} == "$0" ]] && main "$@"
+
