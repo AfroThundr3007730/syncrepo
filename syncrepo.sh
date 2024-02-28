@@ -10,8 +10,8 @@
 set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
-    MODIFIED='20191210'
-    VERSION='1.7.0-rc6'
+    MODIFIED='20240228'
+    VERSION='1.7.0'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, Docker, and ClamAV'
 
@@ -173,7 +173,7 @@ build_vars() {
         )"
         mapfile -t oldrels <<< "$(
             for i in "${allrels[@]}"; do
-                [[ ${i%%.*} -eq "(${allrels[-1]%%.*} - 1)" ]] && echo "$i"
+                [[ ${i%%.*} -eq $((${allrels[-1]%%.*} - 1)) ]] && echo "$i"
             done
         )"
         currel=${allrels[-1]}
