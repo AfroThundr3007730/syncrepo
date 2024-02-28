@@ -20,8 +20,8 @@ Filename               | Description                                 | Notes
 `centos-local.repo`    | Centos package config for clients.          |
 `debian-sources.list`  | Debian package sources for clients.         |
 `ubuntu-sources.list`  | Ubuntu package sources for clients.         |
-`debmirror.pl`         | Copy of `debmirror` for convenience.        | From: [debian/debmirror](https://salsa.debian.org/debian/debmirror)
-`clamavmirror.py`      | Copy of `clamavmirror` for convenience.     | From: [akissa/clamavmirror](https://github.com/akissa/clamavmirror)
+`debmirror/*`          | The `debmirror` tool submodule.             | From: [debian/debmirror](https://salsa.debian.org/debian/debmirror)
+`clamavmirror/* `      | The `clamavmirror` tool submodule.          | From: [akissa/clamavmirror](https://github.com/akissa/clamavmirror)
 
 Note: The `dev` branch is where the latest changes happen.
 It's not guaranteed to be completely functional all the time.

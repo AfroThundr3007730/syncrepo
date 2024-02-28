@@ -1,0 +1,6 @@
+[submodule "clamavmirror"]
+	path = clamavmirror
+	url = https://github.com/akissa/clamavmirror
+[submodule "debmirror"]
+	path = debmirror
+	url = https://salsa.debian.org/debian/debmirror
