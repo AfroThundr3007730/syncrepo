@@ -7,11 +7,11 @@
 #   Don't truncate the variable names, spell em out.
 
 # Gotta keep the namespace clean
-set_globals() {
+syncrepo.set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
-    MODIFIED='20240228'
-    VERSION='1.7.0'
+    MODIFIED='20240304'
+    VERSION='1.8.0-rc1'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, Docker, and ClamAV'
 
@@ -65,25 +65,25 @@ set_globals() {
 }
 
 # Parse command line options
-argument_handler() {
+syncrepo.parse_arguments() {
     [[ -n $1 ]] || {
-        say -h 'No arguments specified, use -h for help.'; exit 10; }
+        utils.say -h 'No arguments specified, use -h for help.'; exit 10; }
 
     while [[ -n $1 ]]; do
         if [[ $1 == -v ]]; then
-            say -h '%s: Version %s, updated %s by %s' \
+            utils.say -h '%s: Version %s, updated %s by %s' \
                 "$BASENAME" "$VERSION" "$MODIFIED" "$AUTHOR"
             ver=true
             shift
         elif [[ $1 == -h ]]; then
-            say -h 'Software repository updater script for linux distros.'
-            say -h 'Can curently sync the following repositories:'
-            say -h '%s\n' "$SOFTWARE"
-            say -h 'Usage: %s [-v] (-h | -y)\n' "$BASENAME"
-            say -h 'Options:'
-            say -h '  -h  Display help text.'
-            say -h '  -v  Emit version info.'
-            say -h '  -y  Confirm repo sync.'
+            utils.say -h 'Software repository updater script for linux distros.'
+            utils.say -h 'Can curently sync the following repositories:'
+            utils.say -h '%s\n' "$SOFTWARE"
+            utils.say -h 'Usage: %s [-v] (-h | -y)\n' "$BASENAME"
+            utils.say -h 'Options:'
+            utils.say -h '  -h  Display help text.'
+            utils.say -h '  -v  Emit version info.'
+            utils.say -h '  -y  Confirm repo sync.'
             # Need to add options
             # -l|--log-file
             # -p|--prog-log
@@ -102,19 +102,19 @@ argument_handler() {
             CONFIRM=true
             shift
         else
-            say -h 'Invalid argument specified, use -h for help.'
+            utils.say -h 'Invalid argument specified, use -h for help.'
             exit 10
         fi
     done
 
     [[ $CONFIRM == true ]] || {
         [[ $ver == true ]] || {
-            say -h 'Confirm with -y to start the sync.'; exit 10; }; exit 0; }
+            utils.say -h 'Confirm with -y to start the sync.'; exit 10; }; exit 0; }
 }
 
 # Log message and print to stdout
 # shellcheck disable=SC2059
-say() {
+utils.say() {
     export TERM=${TERM:=xterm}
     if [[ $1 == -h ]]; then
         shift; local s=$1; shift
@@ -145,16 +145,17 @@ say() {
 }
 
 # Record time duration, concurrent timers
-timer() {
+# shellcheck disable=SC2004
+utils.timer() {
     [[ $1 =~ ^[0-9]+$ ]] && {
         [[ $n -gt $1 ]] || n=$1; local i=$1; shift; }
     [[ $1 == -n ]] && { n=$(( n + 1 )); shift; }
     [[ $1 == -p ]] && { n=$(( n - 1 )); shift; }
     [[ $1 == -c ]] && { local i=$n; shift; }
-    [[ -n $1 ]] || say -n err 'No timer action specified.'
+    [[ -n $1 ]] || utils.say -n err 'No timer action specified.'
     [[ $1 == start ]] && tstart[$i]=$SECONDS
     [[ $1 == stop  ]] && {
-        [[ -n ${tstart[$i]} ]] || say -n err 'Timer %s not started.' "$i"
+        [[ -n ${tstart[$i]} ]] || utils.say -n err 'Timer %s not started.' "$i"
         tstop[$i]=$SECONDS; duration[$i]=$(( tstop[i] - tstart[i] )); }
     [[ $1 == show ]] && {
         [[ -n ${tstop[$i]} ]] || duration[$i]=$(( SECONDS - tstart[i] ))
@@ -163,7 +164,7 @@ timer() {
 }
 
 # Construct the sync environment
-build_vars() {
+syncrepo.build_vars() {
     # Declare more variables (CentOS/EPEL)
     [[ $CENTOS_SYNC == true || $EPEL_SYNC == true || $DOCKER_SYNC == true ]] && {
         mapfile -t allrels <<< "$(
@@ -251,16 +252,16 @@ build_vars() {
     return 0
 }
 
-centos_sync() {
+syncrepo.sync_centos() {
     for repo in $oldrel $currel; do
         # Check for centos release directory
         [[ -d $CENTREPO/$repo ]] || mkdir -p "$CENTREPO/$repo"
 
         # Sync current centos repository
-        say 'Beginning sync of CentOS %s repository from %s.' \
+        utils.say 'Beginning sync of CentOS %s repository from %s.' \
             "$repo" "$CENTHOST"
         rsync $ROPTS $centex "$CENTHOST/$repo/" "$CENTREPO/$repo/"
-        say 'Done.\n'
+        utils.say 'Done.\n'
 
         # Create the symlink, or move, if necessary
         [[ -L ${repo%%.*} && $(readlink "${repo%%.*}") == "$repo" ]] ||
@@ -275,95 +276,95 @@ centos_sync() {
         # Check for point release placeholder
         [[ -f $CENTREPO/$repo/readme ]] || {
             # Sync previous centos repository
-            say 'Beginning sync of CentOS %s repository from %s.' \
+            utils.say 'Beginning sync of CentOS %s repository from %s.' \
                 "$repo" "$CENTHOST"
             rsync $ROPTS $centex "$CENTHOST/$repo/" "$CENTREPO/$repo/"
-            say 'Done.\n'
+            utils.say 'Done.\n'
         }
     done
 
     return 0
 }
 
-epel_sync() {
+syncrepo.sync_epel() {
     for repo in $oldmaj $curmaj testing/{$oldmaj,$curmaj}; do
         # Check for epel release directory
         [[ -d $EPELREPO/$repo ]] || mkdir -p "$EPELREPO/$repo"
 
         # Sync epel repository
-        say 'Beginning sync of EPEL %s repository from %s.' "$repo" "$EPELHOST"
+        utils.say 'Beginning sync of EPEL %s repository from %s.' "$repo" "$EPELHOST"
         rsync $ROPTS $epelex "$EPELHOST/$repo/" "$EPELREPO/$repo/"
-        say 'Done.\n'
+        utils.say 'Done.\n'
     done
 
     return 0
 }
 
-ubuntu_sync() {
+syncrepo.sync_ubuntu() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for ubuntu directory
     [[ -d $UBUNTUREPO ]] || mkdir -p "$UBUNTUREPO"
 
     # Sync ubuntu repository
-    say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
+    utils.say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
         "${ubupre^}" "${ubucur^}" "$UBUNTUHOST"
     $dmirror2 $ubuntuopts $UBUNTUREPO &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
 
     unset GNUPGHOME
     return 0
 }
 
-debian_sync() {
+syncrepo.sync_debian() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for debian directory
     [[ -d $DEBIANREPO ]] || mkdir -p "$DEBIANREPO"
 
     # Sync debian repository
-    say 'Beginning sync of Debian %s and %s repositories from %s.' \
+    utils.say 'Beginning sync of Debian %s and %s repositories from %s.' \
         "${debpre^}" "${debcur^}" "$DEBIANHOST"
     $dmirror2 $debianopts $DEBIANREPO &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
 
     unset GNUPGHOME
     return 0
 }
 
-debsec_sync() {
+syncrepo.sync_debsec() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for debian security directory
     [[ -d $DEBSECREPO ]] || mkdir -p "$DEBSECREPO"
 
     # Sync debian security repository
-    say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
+    utils.say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
         "${debpre^}" "${debcur^}" "$SMIRROR"
     $dmirror2 $debsecopts $DEBSECREPO &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
 
     unset GNUPGHOME
     return 0
 }
 
-sonion_sync() {
+syncrepo.sync_sonion() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for security onion directory
     [[ -d $SONIONREPO ]] || mkdir -p "$SONIONREPO"
 
     # Sync security onion repository
-    say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
+    utils.say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
         "${ubupre^}" "${ubucur^}" "$SOMIRROR"
     $dmirror2 $sonionopts $SONIONREPO &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
 
     unset GNUPGHOME
     return 0
 }
 
-docker_sync() {
+syncrepo.sync_docker() {
     export GNUPGHOME=$REPODIR/.gpg
 
     # Check for docker directory
@@ -373,47 +374,47 @@ docker_sync() {
 
     # TODO: Implement `wget_rsync` method instead of a regular clone
     [[ $CENTOS_SYNC == true ]] && {
-    say 'Beginning sync of Docker Centos %s repository from %s.' \
+    utils.say 'Beginning sync of Docker Centos %s repository from %s.' \
         "${ubucur^}" "$DMIRROR"
     $dockersync &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
     }
 
     [[ $UBUNTU_SYNC == true ]] && {
-    say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
+    utils.say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
         "${ubupre^}" "${ubucur^}" "$DMIRROR"
     $dmirror3 ${dockeroptsu} $DOCKERREPO/ubuntu &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
     }
 
     [[ $DEBIAN_SYNC == true ]] && {
-    say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
+    utils.say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
         "${debpre^}" "${debcur^}" "$DMIRROR"
     $dmirror3 ${dockeroptsd} $DOCKERREPO/debian &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
     }
 
     unset GNUPGHOME
     return 0
 }
 
-clamav_sync() {
+syncrepo.sync_clamav() {
     # Check for clamav directory
     [[ -d $CLAMREPO ]] || mkdir -p "$CLAMREPO"
 
     # Sync clamav repository
-    say 'Beginning sync of ClamAV repository from %s.' "$CMIRROR"
+    utils.say 'Beginning sync of ClamAV repository from %s.' "$CMIRROR"
     $clamsync &>> $PROGFILE
-    say 'Done.\n'
+    utils.say 'Done.\n'
 
     return 0
 }
 
-ds_sync() {
-    say 'Configured as downstream, so mirroring local upstream.'
+syncrepo.sync_downstream() {
+    utils.say 'Configured as downstream, so mirroring local upstream.'
 
     [[ -n $UMIRROR ]] || {
-        say err 'UMIRROR is empty or not set.'; exit 14; }
+        utils.say err 'UMIRROR is empty or not set.'; exit 14; }
 
     # Build array of repos to sync downstream
     [[ $CENTOS_SYNC == true ]] && PACKAGES+=( centos )
@@ -427,7 +428,7 @@ ds_sync() {
     [[ $LOCAL_SYNC  == true ]] && PACKAGES+=( local )
 
     [[ -n ${PACKAGES[*]} ]] || {
-        say err 'No repos enabled for sync.'; exit 15; }
+        utils.say err 'No repos enabled for sync.'; exit 15; }
 
     # For every enabled repo
     for repo in "${PACKAGES[@]}"; do
@@ -435,43 +436,43 @@ ds_sync() {
         [[ -d $REPODIR/$repo ]] || mkdir -p "$REPODIR/$repo"
 
         # Sync the upstream repository
-        say 'Beginning sync of %s repository from %s.' "$repo" "$UMIRROR"
+        utils.say 'Beginning sync of %s repository from %s.' "$repo" "$UMIRROR"
         rsync $ROPTS "${UMIRROR}::$repo/" "$REPODIR/$repo/"
-        say 'Done.\n'
+        utils.say 'Done.\n'
     done
 
     return 0
 }
 
 # Where the magic happens
-main() {
+syncrepo.main() {
     # Set Globals
-    set_globals
+    syncrepo.set_globals
 
     # Process arguments
-    argument_handler "$@"
+    syncrepo.parse_arguments "$@"
 
     # Here we go...
-    say -t 'Progress log reset.'
-    say 'Started synchronization of %s repositories.' "$SOFTWARE"
-    say 'Use tail -f %s to view progress.' "$PROGFILE"
-    timer start
+    utils.say -t 'Progress log reset.'
+    utils.say 'Started synchronization of %s repositories.' "$SOFTWARE"
+    utils.say 'Use tail -f %s to view progress.' "$PROGFILE"
+    utils.timer start
 
     # Check if the rsync script is already running
     if [[ -f $LOCKFILE ]]; then
-        say err 'Detected lockfile: %s' "$LOCKFILE"
-        say err 'Repository updates are already running.'
+        utils.say err 'Detected lockfile: %s' "$LOCKFILE"
+        utils.say err 'Repository updates are already running.'
         exit 11
 
     # Check that we can reach the public mirror
     elif ( [[ $UPSTREAM == true ]] && ! rsync ${MIRROR}:: &> /dev/null ) ||
          ( [[ $UPSTREAM == false ]] && ! rsync ${UMIRROR}:: &> /dev/null ); then
-        say err 'Cannot reach the %s mirror server.' "$MIRROR"
+        utils.say err 'Cannot reach the %s mirror server.' "$MIRROR"
         exit 12
 
     # Check that the repository is mounted
     elif ! mount | grep "$REPODIR" &> /dev/null; then
-        say err 'Directory %s is not mounted.' "$REPODIR"
+        utils.say err 'Directory %s is not mounted.' "$REPODIR"
         exit 13
 
     # Everything is good, let's continue
@@ -482,25 +483,25 @@ main() {
         # Are we upstream?
         if [[ $UPSTREAM == true ]]; then
             # Generate variables
-            build_vars
+            syncrepo.build_vars
 
             # Sync every enabled repo
-            [[ $CENTOS_SYNC == true ]] && centos_sync
-            [[ $EPEL_SYNC   == true ]] && epel_sync
-            [[ $UBUNTU_SYNC == true ]] && ubuntu_sync
-            [[ $DEBIAN_SYNC == true ]] && debian_sync
-            [[ $DEBSEC_SYNC == true ]] && debsec_sync
-            [[ $SONION_SYNC == true ]] && sonion_sync
-            [[ $DOCKER_SYNC == true ]] && docker_sync
-            [[ $CLAMAV_SYNC == true ]] && clamav_sync
-            [[ $LOCAL_SYNC  == true ]] && local_sync
+            [[ $CENTOS_SYNC == true ]] && syncrepo.sync_centos
+            [[ $EPEL_SYNC   == true ]] && syncrepo.sync_epel
+            [[ $UBUNTU_SYNC == true ]] && syncrepo.sync_ubuntu
+            [[ $DEBIAN_SYNC == true ]] && syncrepo.sync_debian
+            [[ $DEBSEC_SYNC == true ]] && syncrepo.sync_debsec
+            [[ $SONION_SYNC == true ]] && syncrepo.sync_sonion
+            [[ $DOCKER_SYNC == true ]] && syncrepo.sync_docker
+            [[ $CLAMAV_SYNC == true ]] && syncrepo.sync_clamav
+            [[ $LOCAL_SYNC  == true ]] && syncrepo.sync_local
         else
             # Do a downstream sync
-            UMIRROR=${UMIRROR:=$MIRROR} && ds_sync
+            UMIRROR=${UMIRROR:=$MIRROR} && syncrepo.sync_downstream
         fi
 
         # Fix ownership of files
-        say 'Normalizing repository file permissions.'
+        utils.say 'Normalizing repository file permissions.'
         chown -R root:www-data "$REPODIR"
 
         # Clear the lockfile
@@ -508,13 +509,12 @@ main() {
     fi
 
     # Now we're done
-    timer stop
-    say 'Completed synchronization of %s repositories.' "$SOFTWARE"
-    say 'Total duration: %d seconds. Current repository size: %s.\n' \
-        "$(timer show)" "$(du -hs $REPODIR | awk '{print $1}')"
+    utils.timer stop
+    utils.say 'Completed synchronization of %s repositories.' "$SOFTWARE"
+    utils.say 'Total duration: %d seconds. Current repository size: %s.\n' \
+        "$(utils.timer show)" "$(du -hs $REPODIR | awk '{print $1}')"
     exit 0
 }
 
 # Only execute if not being sourced
-[[ ${BASH_SOURCE[0]} == "$0" ]] && main "$@"
-
+[[ ${BASH_SOURCE[0]} == "$0" ]] && syncrepo.main "$@"
