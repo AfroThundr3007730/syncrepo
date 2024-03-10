@@ -6,72 +6,15 @@
 # TODO: Implement support for RHEL based SecurityOnion
 # TODO: Implement Docker registry sync logic (also podman registry)
 
-# Initialize global config variables
-syncrepo.set_globals() {
-    SR_META_AUTHOR='AfroThundr'
-    SR_META_BASENAME="${0##*/}"
-    SR_META_MODIFIED='20240309'
-    SR_META_VERSION='1.8.0-rc8'
-    SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
-
-    # User can override with environment variables
-    SR_BOOL_UPSTREAM=${SR_BOOL_UPSTREAM:-true}
-
-    SR_SYNC_ALL_REPOS=${SR_SYNC_ALL_REPOS:-false}
-    SR_SYNC_CENTOS=${SR_SYNC_CENTOS:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_EPEL=${SR_SYNC_EPEL:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_DEBIAN=${SR_SYNC_DEBIAN:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_DEBIAN_SECURITY=${SR_SYNC_DEBIAN_SECURITY:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_UBUNTU=${SR_SYNC_UBUNTU:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_SECURITYONION=${SR_SYNC_SECURITYONION:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_DOCKER=${SR_SYNC_DOCKER:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_CLAMAV=${SR_SYNC_CLAMAV:-$SR_SYNC_ALL_REPOS}
-    SR_SYNC_LOCAL=${SR_SYNC_LOCAL:-$SR_SYNC_ALL_REPOS}
-
-    SR_REPO_PRIMARY=${SR_REPO_PRIMARY:-/srv/repository}
-    SR_REPO_CHOWN_UID=${SR_REPO_CHOWN_UID:-root}
-    SR_REPO_CHOWN_GID=${SR_REPO_CHOWN_GID:-www-data}
-    SR_FILE_LOCKFILE=${SR_FILE_LOCKFILE:-/var/lock/subsys/syncrepo}
-    SR_FILE_LOG_MAIN=${SR_FILE_LOG_MAIN:-/var/log/syncrepo.log}
-    SR_FILE_LOG_PROGRESS=${SR_FILE_LOG_PROGRESS:-/var/log/syncrepo_progress.log}
-
-    SR_MIRROR_PRIMARY=${SR_MIRROR_PRIMARY:-mirrors.mit.edu}
-    SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:-mirror-us.lab.local}
-
-    SR_ARCH_RHEL=${SR_ARCH_RHEL:-x86_64}
-    SR_REPO_CENTOS=${SR_REPO_CENTOS:-${SR_REPO_PRIMARY}/centos}
-    SR_MIRROR_CENTOS=${SR_MIRROR_CENTOS:-${SR_MIRROR_PRIMARY}::centos}
-    SR_REPO_EPEL=${SR_REPO_EPEL:-${SR_REPO_PRIMARY}/fedora-epel}
-    SR_MIRROR_EPEL=${SR_MIRROR_EPEL:-${SR_MIRROR_PRIMARY}::fedora-epel}
-
-    SR_ARCH_DEBIAN=${SR_ARCH_DEBIAN:-amd64}
-    SR_REPO_UBUNTU=${SR_REPO_UBUNTU:-${SR_REPO_PRIMARY}/ubuntu}
-    SR_MIRROR_UBUNTU=${SR_MIRROR_UBUNTU:-${SR_MIRROR_PRIMARY}::ubuntu}
-    SR_REPO_DEBIAN=${SR_REPO_DEBIAN:-${SR_REPO_PRIMARY}/debian}
-    SR_MIRROR_DEBIAN=${SR_MIRROR_DEBIAN:-${SR_MIRROR_PRIMARY}::debian}
-
-    SR_MIRROR_DEBIAN_SECURITY=${SR_MIRROR_DEBIAN_SECURITY:-security.debian.org}
-    SR_REPO_DEBIAN_SECURITY=${SR_REPO_DEBIAN_SECURITY:-${SR_REPO_PRIMARY}/debian-security}
-
-    SR_MIRROR_SECURITYONION=${SR_MIRROR_SECURITYONION:-ppa.launchpad.net}
-    SR_REPO_SECURITYONION=${SR_REPO_SECURITYONION:-${SR_REPO_PRIMARY}/securityonion}
-
-    SR_MIRROR_DOCKER=${SR_MIRROR_DOCKER:-download.docker.com}
-    SR_REPO_DOCKER=${SR_REPO_DOCKER:-${SR_REPO_PRIMARY}/docker}
-
-    SR_MIRROR_CLAMAV=${SR_MIRROR_CLAMAV:-database.clamav.net}
-    SR_REPO_CLAMAV=${SR_REPO_CLAMAV:-${SR_REPO_PRIMARY}/clamav}
-
-    [[ ${SR_FILE_CONFIG[*]} ]] || SR_FILE_CONFIG=(/etc/syncrepo{,/syncrepo}.conf)
-    [[ ${SR_OPTS_RSYNC[*]} ]] ||
-        SR_OPTS_RSYNC=(-hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file="$SR_FILE_LOG_PROGRESS")
-    [[ ${SR_OPTS_TEE[*]} ]] || SR_OPTS_TEE=(tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS")
-
-    return 0
-}
-
 # Parse command line options
 syncrepo.parse_arguments() {
+    SR_META_AUTHOR='AfroThundr'
+    SR_META_BASENAME="${0##*/}"
+    SR_META_MODIFIED='20240310'
+    SR_META_VERSION='1.8.0-rc9'
+    SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
+    SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
+
     [[ -n $1 ]] || {
         utils.say -h 'No arguments specified, use -h for help.'
         exit 1
@@ -81,28 +24,27 @@ syncrepo.parse_arguments() {
         if [[ $1 == -V ]]; then
             utils.say -h '%s: Version %s, updated %s by %s' \
                 "$SR_META_BASENAME" "$SR_META_VERSION" "$SR_META_MODIFIED" "$SR_META_AUTHOR"
-            SR_BOOL_SHOW_VERSION=true
-            shift
+            exit 0
         elif [[ $1 == -h ]]; then
             utils.say -h 'Software repository sync script for linux distros.'
             utils.say -h '\nCan curently sync the following components:'
             utils.say -h '  %s\n' "${SR_META_SOFTWARE[*]}"
-            utils.say -h 'Usage:\n  %s [-V] (-h | -C [-f] [-c <config_file>])' "$SR_META_BASENAME"
-            utils.say -h '  %s [-V] -y [-q|-v] [-d] [-m <mirror>] [-c <config_file>]' "$SR_META_BASENAME"
+            utils.say -h 'Usage:\n  %s -V | -h | -C [-f] [-c <config_file>]' "$SR_META_BASENAME"
+            utils.say -h '  %s -y [-q|-v] [-d] [-m <mirror>] [-c <config_file>]' "$SR_META_BASENAME"
             utils.say -h '    [-l <log_file>] [-p <progress_log>]\n'
             utils.say -h 'Options:'
             utils.say -h '  -a|--arch         Specify architecture to sync.'
             utils.say -h '  -c|--config       Specify config file location.'
-            utils.say -h '  -C|--config-dump  Dumps default values to a config file.'
+            utils.say -h '  -C|--config-save  Saves default values to a config file.'
             utils.say -h '  -d|--downstream   Set this mirror to be downstream.'
-            utils.say -h '  -f|--force-dump   Overwrite config file when dumping.'
-            utils.say -h '  -h|--help         Display this help message.'
+            utils.say -h '  -f|--force-save   Overwrite config file when saving.'
+            utils.say -h '  -h|--help         Display this help message and exit.'
             utils.say -h '  -l|--log-file     Specify log file location.'
             utils.say -h '  -p|--progress     Specify progress log location.'
             utils.say -h '  -m|--mirror       Specify upstream mirror.'
-            utils.say -h '  -q|--quiet        Suppress console output.'
-            utils.say -h '  -v|--verbose     Verbose output to console.'
-            utils.say -h '  -V|--version      Show the version info.'
+            utils.say -h '  -q|--quiet        Suppress output to console.'
+            utils.say -h '  -v|--verbose      Verbose output to console.'
+            utils.say -h '  -V|--version      Show the version info and exit.'
             utils.say -h '  -y|--yes          Confirm the repository sync.'
             utils.say -h '\nYou can explicitly enable components with the following:'
             utils.say -h '  --sync-all        Sync all available components.'
@@ -119,10 +61,10 @@ syncrepo.parse_arguments() {
             SR_META_CONFIG_MANUAL=$2
             shift 2
         elif [[ $1 == -C ]]; then
-            SR_BOOL_DUMP_CONFIG=true
+            SR_BOOL_SAVE_CONFIG=true
             shift
         elif [[ $1 == -f ]]; then
-            SR_BOOL_DUMP_CONFIG_FORCE=true
+            SR_BOOL_SAVE_CONFIG_FORCE=true
             shift
         elif [[ $1 == -q ]]; then
             SR_BOOL_QUIET=true
@@ -140,53 +82,166 @@ syncrepo.parse_arguments() {
         fi
     done
 
-    [[ $SR_BOOL_DUMP_CONFIG == true ]] && {
-        syncrepo.dump_config && exit 0 || exit 1
-    }
-
-    [[ ! $SR_BOOL_CONFIRMED == true ]] && {
-        [[ $SR_BOOL_SHOW_VERSION == true ]] && exit 0
-        utils.say -h 'Confirm with -y to start the sync.'
-        exit 1
-    }
-
     return 0
 }
 
-# Write config file do disk
-syncrepo.dump_config() {
-    local file=${SR_META_CONFIG_MANUAL:-${SR_FILE_CONFIG[0]}}
-    [[ -f $file && ! $SR_BOOL_DUMP_CONFIG_FORCE == true ]] && {
-        utils.say -h 'Config file %s exists, use -f to overwrite.' "$file"
-        return 1
+# Initialize global config variables
+syncrepo.set_globals() {
+    local var
+    for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
+    utils.call syncrepo.load_config
+
+    # User can override with a config file or environment variables
+    [[ $SR_BOOL_UPSTREAM ]] ||
+        SR_BOOL_UPSTREAM=${SR_CFG_BOOL_UPSTREAM:-true}
+    [[ $SR_SYNC_ALL_REPOS ]] ||
+        SR_SYNC_ALL_REPOS=${SR_CFG_SYNC_ALL_REPOS:-false}
+    [[ $SR_SYNC_CENTOS ]] ||
+        SR_SYNC_CENTOS=${SR_CFG_SYNC_CENTOS:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_EPEL ]] ||
+        SR_SYNC_EPEL=${SR_CFG_SYNC_EPEL:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_DEBIAN ]] ||
+        SR_SYNC_DEBIAN=${SR_CFG_SYNC_DEBIAN:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_DEBIAN_SECURITY ]] ||
+        SR_SYNC_DEBIAN_SECURITY=${SR_CFG_SYNC_DEBIAN_SECURITY:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_UBUNTU ]] ||
+        SR_SYNC_UBUNTU=${SR_CFG_SYNC_UBUNTU:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_SECURITYONION ]] ||
+        SR_SYNC_SECURITYONION=${SR_CFG_SYNC_SECURITYONION:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_DOCKER ]] ||
+        SR_SYNC_DOCKER=${SR_CFG_SYNC_DOCKER:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_CLAMAV ]] ||
+        SR_SYNC_CLAMAV=${SR_CFG_SYNC_CLAMAV:-$SR_SYNC_ALL_REPOS}
+    [[ $SR_SYNC_LOCAL ]] ||
+        SR_SYNC_LOCAL=${SR_CFG_SYNC_LOCAL:-$SR_SYNC_ALL_REPOS}
+
+    [[ $SR_REPO_PRIMARY ]] ||
+        SR_REPO_PRIMARY=${SR_CFG_REPO_PRIMARY:-/srv/repository}
+    [[ $SR_REPO_CHOWN_UID ]] ||
+        SR_REPO_CHOWN_UID=${SR_CFG_REPO_CHOWN_UID:-root}
+    [[ $SR_REPO_CHOWN_GID ]] ||
+        SR_REPO_CHOWN_GID=${SR_CFG_REPO_CHOWN_GID:-www-data}
+    [[ $SR_FILE_LOCKFILE ]] ||
+        SR_FILE_LOCKFILE=${SR_CFG_FILE_LOCKFILE:-/var/lock/subsys/syncrepo}
+    [[ $SR_FILE_LOG_MAIN ]] ||
+        SR_FILE_LOG_MAIN=${SR_CFG_FILE_LOG_MAIN:-/var/log/syncrepo.log}
+    [[ $SR_FILE_LOG_PROGRESS ]] ||
+        SR_FILE_LOG_PROGRESS=${SR_CFG_FILE_LOG_PROGRESS:-/var/log/syncrepo_progress.log}
+
+    [[ $SR_MIRROR_PRIMARY ]] ||
+        SR_MIRROR_PRIMARY=${SR_CFG_MIRROR_PRIMARY:-mirrors.mit.edu}
+    [[ $SR_MIRROR_UPSTREAM ]] ||
+        SR_MIRROR_UPSTREAM=${SR_CFG_MIRROR_UPSTREAM:-mirror-us.lab.local}
+
+    [[ $SR_ARCH_RHEL ]] ||
+        SR_ARCH_RHEL=${SR_CFG_ARCH_RHEL:-x86_64}
+    [[ $SR_REPO_CENTOS ]] ||
+        SR_REPO_CENTOS=${SR_CFG_REPO_CENTOS:-${SR_REPO_PRIMARY}/centos}
+    [[ $SR_MIRROR_CENTOS ]] ||
+        SR_MIRROR_CENTOS=${SR_CFG_MIRROR_CENTOS:-${SR_MIRROR_PRIMARY}::-entos}
+    [[ $SR_REPO_EPEL ]] ||
+        SR_REPO_EPEL=${SR_CFG_REPO_EPEL:-${SR_REPO_PRIMARY}/fedora-epel}
+    [[ $SR_MIRROR_EPEL ]] ||
+        SR_MIRROR_EPEL=${SR_CFG_MIRROR_EPEL:-${SR_MIRROR_PRIMARY}::-edora-epel}
+
+    [[ $SR_ARCH_DEBIAN ]] ||
+        SR_ARCH_DEBIAN=${SR_CFG_ARCH_DEBIAN:-amd64}
+    [[ $SR_REPO_UBUNTU ]] ||
+        SR_REPO_UBUNTU=${SR_CFG_REPO_UBUNTU:-${SR_REPO_PRIMARY}/ubuntu}
+    [[ $SR_MIRROR_UBUNTU ]] ||
+        SR_MIRROR_UBUNTU=${SR_CFG_MIRROR_UBUNTU:-${SR_MIRROR_PRIMARY}::-buntu}
+    [[ $SR_REPO_DEBIAN ]] ||
+        SR_REPO_DEBIAN=${SR_CFG_REPO_DEBIAN:-${SR_REPO_PRIMARY}/debian}
+    [[ $SR_MIRROR_DEBIAN ]] ||
+        SR_MIRROR_DEBIAN=${SR_CFG_MIRROR_DEBIAN:-${SR_MIRROR_PRIMARY}::-ebian}
+
+    [[ $SR_MIRROR_DEBIAN_SECURITY ]] ||
+        SR_MIRROR_DEBIAN_SECURITY=${SR_CFG_MIRROR_DEBIAN_SECURITY:-security.debian.org}
+    [[ $SR_REPO_DEBIAN_SECURITY ]] ||
+        SR_REPO_DEBIAN_SECURITY=${SR_CFG_REPO_DEBIAN_SECURITY:-${SR_REPO_PRIMARY}/debian-security}
+
+    [[ $SR_MIRROR_SECURITYONION ]] ||
+        SR_MIRROR_SECURITYONION=${SR_CFG_MIRROR_SECURITYONION:-ppa.launchpad.net}
+    [[ $SR_REPO_SECURITYONION ]] ||
+        SR_REPO_SECURITYONION=${SR_CFG_REPO_SECURITYONION:-${SR_REPO_PRIMARY}/securityonion}
+
+    [[ $SR_MIRROR_DOCKER ]] ||
+        SR_MIRROR_DOCKER=${SR_CFG_MIRROR_DOCKER:-download.docker.com}
+    [[ $SR_REPO_DOCKER ]] ||
+        SR_REPO_DOCKER=${SR_CFG_REPO_DOCKER:-${SR_REPO_PRIMARY}/docker}
+
+    [[ $SR_MIRROR_CLAMAV ]] ||
+        SR_MIRROR_CLAMAV=${SR_CFG_MIRROR_CLAMAV:-database.clamav.net}
+    [[ $SR_REPO_CLAMAV ]] ||
+        SR_REPO_CLAMAV=${SR_CFG_REPO_CLAMAV:-${SR_REPO_PRIMARY}/clamav}
+
+    [[ ${SR_OPTS_RSYNC[*]} ]] || {
+        [[ $SR_CFG_OPTS_RSYNC ]] && SR_OPTS_RSYNC=("${SR_CFG_OPTS_RSYNC[@]}") ||
+            SR_OPTS_RSYNC=(--hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file="$SR_FILE_LOG_PROGRESS")
     }
-    utils.say -h 'Writing configuration to: %s' "$file"
-    set | awk '/^SR_/ && !/_(BOOL|META)_/ {gsub(/^SR_/,"SR_CFG_"); print $0}' >"$file"
+    [[ ${SR_OPTS_TEE[*]} ]] || {
+        [[ $SR_CFG_OPTS_TEE ]] && SR_OPTS_TEE=("${SR_CFG_OPTS_TEE[@]}") ||
+            SR_OPTS_TEE=(tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS")
+    }
+
+    for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
+    utils.call syncrepo.save_config
     return 0
 }
 
 # Read settings from config file
 # shellcheck disable=SC1090
-syncrepo.parse_config() {
-    local file files=("${SR_META_CONFIG_MANUAL:-${SR_FILE_CONFIG[@]}}")
+syncrepo.load_config() {
+    local file files=("${SR_META_CONFIG_MANUAL:-${SR_META_CONFIGS[@]}}")
     for file in "${files[@]}"; do
         [[ -s $file ]] && {
             utils.say -h 'Reading configuration from: %s' "$file"
-            source <(awk '/^SR_CFG_/ && !/_(BOOL|META)_/ {gsub(/^SR_CFG_/,"SR_"); print $0}' "$file")
+            source <(awk '/^SR_CFG_/ && !/^SR_CFG_(BOOL|META)_/ {print $0}' "$file")
         }
     done
     return 0
+}
+
+# Write config file do disk
+syncrepo.save_config() {
+    [[ $SR_BOOL_SAVE_CONFIG == true ]] && {
+        local file=${SR_META_CONFIG_MANUAL:-${SR_META_CONFIGS[0]}}
+        [[ -f $file && ! $SR_BOOL_SAVE_CONFIG_FORCE == true ]] && {
+            utils.say -h 'Config file %s exists, use -f to overwrite.' "$file"
+            exit 1
+        }
+        utils.say -h 'Writing configuration to: %s' "$file"
+        set | awk '/^SR_/ && !/^SR_(BOOL|META)_/ {gsub(/^SR_/,"SR_CFG_"); print $0}' >"$file"
+        exit 0
+    }
+    return 0
+}
+
+# Debug wrapper to trace function calls
+utils.call() {
+    local name=$1 && shift
+    utils.say -d 'entering %s' "$name"
+    "$name" "$@"
+    utils.say -d 'leaving %s' "$name"
 }
 
 # Log message and print to stdout
 # shellcheck disable=SC2059
 utils.say() {
     export TERM=${TERM:-xterm}
-    if [[ $1 == -h ]]; then
-        local say_format=$2
-        shift 2
-        tput setaf 2
-        printf "$say_format\\n" "$@"
+    if [[ $1 == -h || $1 == -d ]]; then
+        [[ $1 == -h ]] && {
+            tput setaf 2
+            local say_format=$2
+            shift 2
+            printf "$say_format\\n" "$@"
+        }
+        [[ $1 == -d && $SR_BOOL_DEBUG ]] && {
+            tput setaf 6
+            local say_format=$2
+            shift 2
+            printf "$say_format\\n" "$@"
+        }
     else
         if [[ $SR_FILE_LOG_MAIN == no || $1 == -n ]]; then
             [[ $1 == -n ]] && shift
@@ -395,25 +450,31 @@ syncrepo.build_vars() {
 # NOTE: Dependency checks for all binaries
 # NOTE: Catch nonsensical configuration issues
 syncrepo.sanity_check() {
+    # Keep the user from starting the script by accident
+    [[ $SR_BOOL_CONFIRMED == true ]] || {
+        utils.say err 'Confirm with -y to start the sync.'
+        exit 1
+    }
+
     # Check if the rsync script is already running
-    if [[ -f $SR_FILE_LOCKFILE ]]; then
+    [[ -f $SR_FILE_LOCKFILE ]] && {
         utils.say err 'Detected lockfile: %s' "$SR_FILE_LOCKFILE"
         utils.say err 'Repository updates are already running.'
         exit 1
-    fi
+    }
 
     # Check that we can reach the public mirror
-    if ([[ $SR_BOOL_UPSTREAM == true ]] && ! rsync "${SR_MIRROR_PRIMARY}::" &>/dev/null) ||
-        ([[ $SR_BOOL_UPSTREAM == false ]] && ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null); then
+    ([[ $SR_BOOL_UPSTREAM == true ]] && ! rsync "${SR_MIRROR_PRIMARY}::" &>/dev/null) ||
+        ([[ $SR_BOOL_UPSTREAM == false ]] && ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null) && {
         utils.say err 'Cannot reach the %s mirror server.' "$SR_MIRROR_PRIMARY"
         exit 1
-    fi
+    }
 
     # Check that the repository is mounted
-    if ! mount | grep "$SR_REPO_PRIMARY" &>/dev/null; then
+    mount | grep "$SR_REPO_PRIMARY" &>/dev/null || {
         utils.say err 'Directory %s is not mounted.' "$SR_REPO_PRIMARY"
         exit 1
-    fi
+    }
 
     # TODO: Dig through the other functions and move their checks here
 
@@ -632,17 +693,14 @@ syncrepo.sync_downstream() {
 
 # Where the magic happens
 syncrepo.main() {
-    # Set Globals
-    syncrepo.set_globals
-
-    # Read config file
-    syncrepo.parse_config
-
     # Process arguments
-    syncrepo.parse_arguments "$@"
+    utils.call syncrepo.parse_arguments "$@"
 
-    syncrepo.sanity_check && {
-        # If evrything is good, begin the sync
+    # Set global defaults
+    utils.call syncrepo.set_globals
+
+    # If evrything is good, begin the sync
+    utils.call syncrepo.sanity_check && {
         utils.say -t 'Progress log reset.'
         utils.say 'Started synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
         utils.say 'Use tail -f %s to view progress.' "$SR_FILE_LOG_PROGRESS"
@@ -654,24 +712,25 @@ syncrepo.main() {
         # Are we upstream?
         if [[ $SR_BOOL_UPSTREAM == true ]]; then
             # Generate variables
-            syncrepo.build_vars
+            utils.call syncrepo.build_vars
 
             # Sync every enabled repo
             # WIP: Maybe move these guards inside their respective functions
             #   Then we could remove sync_downstream and inline that too
-            [[ $SR_SYNC_CENTOS          == true ]] && syncrepo.sync_centos
-            [[ $SR_SYNC_EPEL            == true ]] && syncrepo.sync_epel
-            [[ $SR_SYNC_UBUNTU          == true ]] && syncrepo.sync_ubuntu
-            [[ $SR_SYNC_DEBIAN          == true ]] && syncrepo.sync_debian
-            [[ $SR_SYNC_DEBIAN_SECURITY == true ]] && syncrepo.sync_debian_security
-            [[ $SR_SYNC_SECURITYONION   == true ]] && syncrepo.sync_securityonion
-            [[ $SR_SYNC_DOCKER          == true ]] && syncrepo.sync_docker
-            [[ $SR_SYNC_CLAMAV          == true ]] && syncrepo.sync_clamav
-            [[ $SR_SYNC_LOCAL           == true ]] && syncrepo.sync_local
+            [[ $SR_SYNC_CENTOS          == true ]] && utils.call syncrepo.sync_centos
+            [[ $SR_SYNC_EPEL            == true ]] && utils.call syncrepo.sync_epel
+            [[ $SR_SYNC_UBUNTU          == true ]] && utils.call syncrepo.sync_ubuntu
+            [[ $SR_SYNC_DEBIAN          == true ]] && utils.call syncrepo.sync_debian
+            [[ $SR_SYNC_DEBIAN_SECURITY == true ]] && utils.call syncrepo.sync_debian_security
+            [[ $SR_SYNC_SECURITYONION   == true ]] && utils.call syncrepo.sync_securityonion
+            [[ $SR_SYNC_DOCKER          == true ]] && utils.call syncrepo.sync_docker
+            [[ $SR_SYNC_CLAMAV          == true ]] && utils.call syncrepo.sync_clamav
+            [[ $SR_SYNC_LOCAL           == true ]] && utils.call syncrepo.sync_local
         else
             # Do a downstream sync
             # TODO: This should probably be empty until set by the user
-            SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:-$SR_MIRROR_PRIMARY} && syncrepo.sync_downstream
+            SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:-$SR_MIRROR_PRIMARY} &&
+                utils.call syncrepo.sync_downstream
         fi
 
         # Fix ownership of files
@@ -692,4 +751,4 @@ syncrepo.main() {
 }
 
 # Only execute if not being sourced
-[[ ${BASH_SOURCE[0]} == "$0" ]] && syncrepo.main "$@"
+[[ ${BASH_SOURCE[0]} == "$0" ]] && utils.call syncrepo.main "$@"
