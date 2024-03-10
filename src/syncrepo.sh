@@ -5,64 +5,71 @@
 # TODO: Note to self, since I probably forgot again:
 #   Don't truncate the variable names, spell em out.
 
-# Gotta keep the namespace clean
+# Initialize global config variables
 syncrepo.set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
     MODIFIED='20240308'
-    VERSION='1.8.0-rc3'
+    VERSION='1.8.0-rc4'
 
     SR_LIST_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
 
-    # Global config variables (override with environment variables)
-    # TODO: Build config file schema
-    SR_BOOL_UPSTREAM=${SR_BOOL_UPSTREAM:=true}
-    SR_SYNC_CENTOS=${SR_SYNC_CENTOS:=true}
-    SR_SYNC_EPEL=${SR_SYNC_EPEL:=true}
-    SR_SYNC_DEBIAN=${SR_SYNC_DEBIAN:=true}
-    SR_SYNC_DEBSEC=${SR_SYNC_DEBSEC:=true}
-    SR_SYNC_UBUNTU=${SR_SYNC_UBUNTU:=true}
-    SR_SYNC_SONION=${SR_SYNC_SONION:=true}
-    SR_SYNC_DOCKER=${SR_SYNC_DOCKER:=true}
-    SR_SYNC_CLAMAV=${SR_SYNC_CLAMAV:=true}
-    SR_SYNC_LOCAL=${SR_SYNC_LOCAL:=true}
+    # User can override with environment variables
+    SR_BOOL_UPSTREAM=${SR_BOOL_UPSTREAM:-true}
 
-    SR_REPO_PRIMARY=${SR_REPO_PRIMARY:=/srv/repository}
-    SR_FILE_LOCKFILE=${SR_FILE_LOCKFILE:=/var/lock/subsys/syncrepo}
-    SR_FILE_LOG_MAIN=${SR_FILE_LOG_MAIN:=/var/log/syncrepo.log}
-    SR_FILE_LOG_PROGRESS=${SR_FILE_LOG_PROGRESS:=/var/log/syncrepo_progress.log}
+    SR_SYNC_ALL_REPOS=${SR_SYNC_ALL_REPOS:-false}
+    SR_SYNC_CENTOS=${SR_SYNC_CENTOS:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_EPEL=${SR_SYNC_EPEL:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_DEBIAN=${SR_SYNC_DEBIAN:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_DEBIAN_SECURITY=${SR_SYNC_DEBIAN_SECURITY:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_UBUNTU=${SR_SYNC_UBUNTU:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_SECURITYONION=${SR_SYNC_SECURITYONION:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_DOCKER=${SR_SYNC_DOCKER:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_CLAMAV=${SR_SYNC_CLAMAV:-$SR_SYNC_ALL_REPOS}
+    SR_SYNC_LOCAL=${SR_SYNC_LOCAL:-$SR_SYNC_ALL_REPOS}
 
-    # More internal config variables
-    SR_MIRROR_PRIMARY=${SR_MIRROR_PRIMARY:=mirrors.mit.edu}
-    SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:=mirror-us.lab.local}
+    SR_REPO_PRIMARY=${SR_REPO_PRIMARY:-/srv/repository}
+    SR_REPO_CHOWN_UID=${SR_REPO_CHOWN_UID:-root}
+    SR_REPO_CHOWN_GID=${SR_REPO_CHOWN_GID:-www-data}
+    SR_FILE_LOCKFILE=${SR_FILE_LOCKFILE:-/var/lock/subsys/syncrepo}
+    SR_FILE_LOG_MAIN=${SR_FILE_LOG_MAIN:-/var/log/syncrepo.log}
+    SR_FILE_LOG_PROGRESS=${SR_FILE_LOG_PROGRESS:-/var/log/syncrepo_progress.log}
 
-    SR_ARCH_RHEL=${SR_ARCH_RHEL:=x86_64}
-    SR_REPO_CENTOS=${SR_REPO_CENTOS:=${SR_REPO_PRIMARY}/centos}
-    SR_MIRROR_CENTOS=${SR_MIRROR_CENTOS:=${SR_MIRROR_PRIMARY}::centos}
-    SR_REPO_EPEL=${SR_REPO_EPEL:=${SR_REPO_PRIMARY}/fedora-epel}
-    SR_MIRROR_EPEL=${SR_MIRROR_EPEL:=${SR_MIRROR_PRIMARY}::fedora-epel}
+    SR_MIRROR_PRIMARY=${SR_MIRROR_PRIMARY:-mirrors.mit.edu}
+    SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:-mirror-us.lab.local}
 
-    SR_ARCH_DEBIAN=${SR_ARCH_DEBIAN:=amd64}
-    SR_REPO_UBUNTU=${SR_REPO_UBUNTU:=${SR_REPO_PRIMARY}/ubuntu}
-    SR_MIRROR_UBUNTU=${SR_MIRROR_UBUNTU:=${SR_MIRROR_PRIMARY}::ubuntu}
-    SR_REPO_DEBIAN=${SR_REPO_DEBIAN:=${SR_REPO_PRIMARY}/debian}
-    SR_MIRROR_DEBIAN=${SR_MIRROR_DEBIAN:=${SR_MIRROR_PRIMARY}::debian}
+    SR_ARCH_RHEL=${SR_ARCH_RHEL:-x86_64}
+    SR_REPO_CENTOS=${SR_REPO_CENTOS:-${SR_REPO_PRIMARY}/centos}
+    SR_MIRROR_CENTOS=${SR_MIRROR_CENTOS:-${SR_MIRROR_PRIMARY}::centos}
+    SR_REPO_EPEL=${SR_REPO_EPEL:-${SR_REPO_PRIMARY}/fedora-epel}
+    SR_MIRROR_EPEL=${SR_MIRROR_EPEL:-${SR_MIRROR_PRIMARY}::fedora-epel}
 
-    SR_MIRROR_DEBIAN_SECURITY=${SR_MIRROR_DEBIAN_SECURITY:=security.debian.org}
-    SR_REPO_DEBIAN_SECURITY=${SR_REPO_DEBIAN_SECURITY:=${SR_REPO_PRIMARY}/debian-security}
+    SR_ARCH_DEBIAN=${SR_ARCH_DEBIAN:-amd64}
+    SR_REPO_UBUNTU=${SR_REPO_UBUNTU:-${SR_REPO_PRIMARY}/ubuntu}
+    SR_MIRROR_UBUNTU=${SR_MIRROR_UBUNTU:-${SR_MIRROR_PRIMARY}::ubuntu}
+    SR_REPO_DEBIAN=${SR_REPO_DEBIAN:-${SR_REPO_PRIMARY}/debian}
+    SR_MIRROR_DEBIAN=${SR_MIRROR_DEBIAN:-${SR_MIRROR_PRIMARY}::debian}
 
-    SR_MIRROR_SECURITYONION=${SR_MIRROR_SECURITYONION:=ppa.launchpad.net}
-    SR_REPO_SECURITYONION=${SR_REPO_SECURITYONION:=${SR_REPO_PRIMARY}/securityonion}
+    SR_MIRROR_DEBIAN_SECURITY=${SR_MIRROR_DEBIAN_SECURITY:-security.debian.org}
+    SR_REPO_DEBIAN_SECURITY=${SR_REPO_DEBIAN_SECURITY:-${SR_REPO_PRIMARY}/debian-security}
 
-    SR_MIRROR_DOCKER=${SR_MIRROR_DOCKER:=download.docker.com}
-    SR_REPO_DOCKER=${SR_REPO_DOCKER:=${SR_REPO_PRIMARY}/docker}
+    SR_MIRROR_SECURITYONION=${SR_MIRROR_SECURITYONION:-ppa.launchpad.net}
+    SR_REPO_SECURITYONION=${SR_REPO_SECURITYONION:-${SR_REPO_PRIMARY}/securityonion}
 
-    SR_MIRROR_CLAMAV=${SR_MIRROR_CLAMAV:=database.clamav.net}
-    SR_REPO_CLAMAV=${SR_REPO_CLAMAV:=${SR_REPO_PRIMARY}/clamav}
+    SR_MIRROR_DOCKER=${SR_MIRROR_DOCKER:-download.docker.com}
+    SR_REPO_DOCKER=${SR_REPO_DOCKER:-${SR_REPO_PRIMARY}/docker}
 
+    SR_MIRROR_CLAMAV=${SR_MIRROR_CLAMAV:-database.clamav.net}
+    SR_REPO_CLAMAV=${SR_REPO_CLAMAV:-${SR_REPO_PRIMARY}/clamav}
+
+    [[ ${SR_FILE_CONFIG[*]} ]] || SR_FILE_CONFIG=(/etc/syncrepo{,/syncrepo}.conf)
     [[ ${SR_OPTS_RSYNC[*]} ]] ||
         SR_OPTS_RSYNC=(-hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file="$SR_FILE_LOG_PROGRESS")
     [[ ${SR_OPTS_TEE[*]} ]] || SR_OPTS_TEE=(tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS")
+
+    # Source a config file if it exists (an environment file)
+    # shellcheck disable=SC1090
+    for file in "${SR_FILE_CONFIG[@]}"; do [[ -f $file ]] && source "$file"; done
 }
 
 # Parse command line options
@@ -82,7 +89,7 @@ syncrepo.parse_arguments() {
             utils.say -h 'Software repository updater script for linux distros.'
             utils.say -h 'Can curently sync the following repositories:'
             utils.say -h '%s\n' "${SR_LIST_SOFTWARE[*]}"
-            utils.say -h 'Usage: %s [-v] (-h | -y)\n' "$BASENAME"
+            utils.say -h 'Usage: %s [-v] [-q] (-h | -y)\n' "$BASENAME"
             utils.say -h 'Options:'
             utils.say -h '  -a|--arch         Specify architecture to sync.'
             utils.say -h '  -d|--downstream   Set this mirror to be downstream.'
@@ -90,6 +97,7 @@ syncrepo.parse_arguments() {
             utils.say -h '  -l|--log-file     Specify log file location.'
             utils.say -h '  -p|--prog-log     Specify progress log location.'
             utils.say -h '  -m|--mirror       Specify upstream mirror.'
+            utils.say -h '  -q|--quiet        Suppress console output.'
             utils.say -h '  -s|--sync         List of components to sync.'
             utils.say -h '  -v|--version      Show the version info.'
             utils.say -h '  -y|--yes          Confirm the repository sync.'
@@ -128,7 +136,7 @@ syncrepo.parse_arguments() {
 # Log message and print to stdout
 # shellcheck disable=SC2059
 utils.say() {
-    export TERM=${TERM:=xterm}
+    export TERM=${TERM:-xterm}
     if [[ $1 == -h ]]; then
         local s=$2
         shift 2
@@ -234,7 +242,7 @@ syncrepo.build_vars() {
     }
 
     # Declare more variables (Debian/Ubuntu)
-    [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_SONION == true || $SR_SYNC_DOCKER == true ]] && {
+    [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_SECURITYONION == true || $SR_SYNC_DOCKER == true ]] && {
         mapfile -t uburels <<<"$(
             curl -sL "$SR_MIRROR_PRIMARY/ubuntu-releases/HEADER.html" |
                 awk -F '(' '/<li.+>/ && /LTS/ && match($2, /[[:alpha:]]+/, a) {print a[0]}'
@@ -253,7 +261,7 @@ syncrepo.build_vars() {
         dockeroptsu+=' -r /linux/ubuntu'
     }
 
-    [[ $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBSEC == true || $SR_SYNC_DOCKER == true ]] && {
+    [[ $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBIAN_SECURITY == true || $SR_SYNC_DOCKER == true ]] && {
         mapfile -t debrels <<<"$(
             curl -sL "$SR_MIRROR_PRIMARY/debian/README.html" |
                 awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
@@ -272,8 +280,8 @@ syncrepo.build_vars() {
         dockeroptsd+=' -r /linux/debian'
     }
 
-    [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_DEBIAN == true ||
-        $SR_SYNC_DEBSEC == true || $SR_SYNC_SONION == true || $SR_SYNC_DOCKER == true ]] && {
+    [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBIAN_SECURITY == true ||
+        $SR_SYNC_SECURITYONION == true || $SR_SYNC_DOCKER == true ]] && {
         dmirror1="debmirror -a $SR_ARCH_DEBIAN --no-source --ignore-small-errors"
         dmirror1+=" --method=rsync --retry-rsync-packages=5 -p --rsync-options="
         dmirror2="debmirror -a $SR_ARCH_DEBIAN --no-source --ignore-small-errors"
@@ -369,7 +377,7 @@ syncrepo.sync_debian() {
     return 0
 }
 
-syncrepo.sync_debsec() {
+syncrepo.sync_debian_security() {
     export GNUPGHOME=$SR_REPO_PRIMARY/.gpg
 
     # Check for debian security directory
@@ -385,7 +393,7 @@ syncrepo.sync_debsec() {
     return 0
 }
 
-syncrepo.sync_sonion() {
+syncrepo.sync_securityonion() {
     export GNUPGHOME=$SR_REPO_PRIMARY/.gpg
 
     # Check for security onion directory
@@ -456,15 +464,15 @@ syncrepo.sync_downstream() {
     }
 
     # Build array of repos to sync downstream
-    [[ $SR_SYNC_CENTOS == true ]] && SR_LIST_PACKAGES+=(centos)
-    [[ $SR_SYNC_EPEL   == true ]] && SR_LIST_PACKAGES+=(fedora-epel)
-    [[ $SR_SYNC_UBUNTU == true ]] && SR_LIST_PACKAGES+=(ubuntu)
-    [[ $SR_SYNC_DEBIAN == true ]] && SR_LIST_PACKAGES+=(debian)
-    [[ $SR_SYNC_DEBSEC == true ]] && SR_LIST_PACKAGES+=(debian-security)
-    [[ $SR_SYNC_SONION == true ]] && SR_LIST_PACKAGES+=(securityonion)
-    [[ $SR_SYNC_DOCKER == true ]] && SR_LIST_PACKAGES+=(docker)
-    [[ $SR_SYNC_CLAMAV == true ]] && SR_LIST_PACKAGES+=(clamav)
-    [[ $SR_SYNC_LOCAL  == true ]] && SR_LIST_PACKAGES+=(local)
+    [[ $SR_SYNC_CENTOS          == true ]] && SR_LIST_PACKAGES+=(centos)
+    [[ $SR_SYNC_EPEL            == true ]] && SR_LIST_PACKAGES+=(fedora-epel)
+    [[ $SR_SYNC_UBUNTU          == true ]] && SR_LIST_PACKAGES+=(ubuntu)
+    [[ $SR_SYNC_DEBIAN          == true ]] && SR_LIST_PACKAGES+=(debian)
+    [[ $SR_SYNC_DEBIAN_SECURITY == true ]] && SR_LIST_PACKAGES+=(debian-security)
+    [[ $SR_SYNC_SECURITYONION   == true ]] && SR_LIST_PACKAGES+=(securityonion)
+    [[ $SR_SYNC_DOCKER          == true ]] && SR_LIST_PACKAGES+=(docker)
+    [[ $SR_SYNC_CLAMAV          == true ]] && SR_LIST_PACKAGES+=(clamav)
+    [[ $SR_SYNC_LOCAL           == true ]] && SR_LIST_PACKAGES+=(local)
 
     [[ -n ${SR_LIST_PACKAGES[*]} ]] || {
         utils.say err 'No repos enabled for sync.'
@@ -527,24 +535,23 @@ syncrepo.main() {
             syncrepo.build_vars
 
             # Sync every enabled repo
-            [[ $SR_SYNC_CENTOS == true ]] && syncrepo.sync_centos
-            [[ $SR_SYNC_EPEL   == true ]] && syncrepo.sync_epel
-            [[ $SR_SYNC_UBUNTU == true ]] && syncrepo.sync_ubuntu
-            [[ $SR_SYNC_DEBIAN == true ]] && syncrepo.sync_debian
-            [[ $SR_SYNC_DEBSEC == true ]] && syncrepo.sync_debsec
-            [[ $SR_SYNC_SONION == true ]] && syncrepo.sync_sonion
-            [[ $SR_SYNC_DOCKER == true ]] && syncrepo.sync_docker
-            [[ $SR_SYNC_CLAMAV == true ]] && syncrepo.sync_clamav
-            [[ $SR_SYNC_LOCAL  == true ]] && syncrepo.sync_local
+            [[ $SR_SYNC_CENTOS          == true ]] && syncrepo.sync_centos
+            [[ $SR_SYNC_EPEL            == true ]] && syncrepo.sync_epel
+            [[ $SR_SYNC_UBUNTU          == true ]] && syncrepo.sync_ubuntu
+            [[ $SR_SYNC_DEBIAN          == true ]] && syncrepo.sync_debian
+            [[ $SR_SYNC_DEBIAN_SECURITY == true ]] && syncrepo.sync_debian_security
+            [[ $SR_SYNC_SECURITYONION   == true ]] && syncrepo.sync_securityonion
+            [[ $SR_SYNC_DOCKER          == true ]] && syncrepo.sync_docker
+            [[ $SR_SYNC_CLAMAV          == true ]] && syncrepo.sync_clamav
+            [[ $SR_SYNC_LOCAL           == true ]] && syncrepo.sync_local
         else
             # Do a downstream sync
-            SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:=$SR_MIRROR_PRIMARY} && syncrepo.sync_downstream
+            SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:-$SR_MIRROR_PRIMARY} && syncrepo.sync_downstream
         fi
 
         # Fix ownership of files
-        # TODO: Make uid/gid into variable
         utils.say 'Normalizing repository file permissions.'
-        chown -R root:www-data "$SR_REPO_PRIMARY"
+        chown -R "$SR_REPO_CHOWN_UID:$SR_REPO_CHOWN_GID" "$SR_REPO_PRIMARY"
 
         # Clear the lockfile
         rm -f "$SR_FILE_LOCKFILE"
