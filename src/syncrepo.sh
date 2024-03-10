@@ -7,7 +7,7 @@ syncrepo.set_globals() {
     SR_META_AUTHOR='AfroThundr'
     SR_META_BASENAME="${0##*/}"
     SR_META_MODIFIED='20240308'
-    SR_META_VERSION='1.8.0-rc5'
+    SR_META_VERSION='1.8.0-rc6'
     SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
 
     # User can override with environment variables
@@ -226,6 +226,7 @@ utils.timer() {
 
 # Construct the sync environment
 syncrepo.build_vars() {
+    IFS=,
     # Declare more variables (CentOS/EPEL)
     [[ $SR_SYNC_CENTOS == true || $SR_SYNC_EPEL == true || $SR_SYNC_DOCKER == true ]] && {
         mapfile -t rhel_all_releases <<<"$(
@@ -252,8 +253,8 @@ syncrepo.build_vars() {
         )
         epel_filter_rsync=(--exclude={SRPMS,aarch64,i386,ppc64,ppc64le,s390x,$SR_ARCH_RHEL/debug})
 
-        docker_sync_args="wget -m -np -N -nH -r --cut-dirs=1 -R 'index.html' -P $SR_REPO_PRIMARY/docker/"
-        docker_sync_args+=" $SR_MIRROR_DOCKER/linux/centos/$rhel_current_major_version/$SR_ARCH_RHEL/stable/"
+        docker_sync_args=(wget -m -np -N -nH -r --cut-dirs=1 -R index.html -P "$SR_REPO_PRIMARY/docker/")
+        docker_sync_args+=("$SR_MIRROR_DOCKER/linux/centos/$rhel_current_major_version/$SR_ARCH_RHEL/stable/")
     }
 
     # Declare more variables (Debian/Ubuntu)
@@ -265,15 +266,15 @@ syncrepo.build_vars() {
         ubuntu_current_release=${ubuntu_all_releases[0],}
         ubuntu_previous_release=${ubuntu_all_releases[1],}
 
-        ubuntu_components='main,restricted,universe,multiverse'
+        ubuntu_components=(main restricted universe multiverse)
         ubuntu_repos=({$ubuntu_previous_release,$ubuntu_current_release}{,-backports,-updates,-proposed,-security})
-        IFS=, ubuntu_sync_args="-s $ubuntu_components -d ${ubuntu_repos[*]} -h $SR_MIRROR_PRIMARY -r /ubuntu"
+        ubuntu_sync_args=(-s "${ubuntu_components[*]}" -d "${ubuntu_repos[*]}" -h "$SR_MIRROR_PRIMARY" -r /ubuntu)
 
-        securityonion_sync_args="-s main -d $ubuntu_previous_release -d $ubuntu_current_release -h $SR_MIRROR_SECURITYONION"
-        securityonion_sync_args+=" --rsync-extra=none -r /securityonion/stable/ubuntu"
+        securityonion_sync_args=(-s main -d "$ubuntu_previous_release,$ubuntu_current_release")
+        securityonion_sync_args+=(-h "$SR_MIRROR_SECURITYONION" --rsync-extra=none -r /securityonion/stable/ubuntu)
 
-        docker_sync_args_ubuntu="-s stable -d $ubuntu_previous_release -d $ubuntu_current_release -h $SR_MIRROR_DOCKER"
-        docker_sync_args_ubuntu+=' --rsync-extra=none -r /linux/ubuntu'
+        docker_sync_args_ubuntu=(-s stable -d "$ubuntu_previous_release,$ubuntu_current_release")
+        docker_sync_args_ubuntu+=(-h "$SR_MIRROR_DOCKER" --rsync-extra=none -r /linux/ubuntu)
     }
 
     [[ $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBIAN_SECURITY == true || $SR_SYNC_DOCKER == true ]] && {
@@ -284,31 +285,34 @@ syncrepo.build_vars() {
         debian_current_release=${debian_all_releases[0]}
         debian_previous_release=${debian_all_releases[1]}
 
-        debian_components='main,contrib,non-free'
+        debian_components=(main contrib non-free)
         debian_repos=({$debian_previous_release,$debian_current_release}{,-backports,-updates,-proposed-updates})
-        IFS=, debian_sync_args="-s $debian_components -d ${debian_repos[*]} -h $SR_MIRROR_PRIMARY -r /debian"
+        debian_sync_args=(-s "${debian_components[*]}" -d "${debian_repos[*]}" -h "$SR_MIRROR_PRIMARY" -r /debian)
 
         debian_repos_security=({$debian_current_release,$debian_previous_release}/updates)
-        IFS=, debian_sync_args_security="-s $debian_components -d ${debian_repos_security[*]} -h $SR_MIRROR_DEBIAN_SECURITY -r /"
+        debian_sync_args_security=(-s "${debian_components[*]}" -d "${debian_repos_security[*]}")
+        debian_sync_args_security+=(-h "$SR_MIRROR_DEBIAN_SECURITY" -r /)
 
-        docker_sync_args_debian="-s stable -d $debian_previous_release -d $debian_current_release -h $SR_MIRROR_DOCKER"
-        docker_sync_args_debian+=' --rsync-extra=none -r /linux/debian'
+        docker_sync_args_debian=(-s stable -d "$debian_previous_release,$debian_current_release")
+        docker_sync_args_debian+=(-h "$SR_MIRROR_DOCKER" --rsync-extra=none -r /linux/debian)
     }
 
     [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBIAN_SECURITY == true ||
         $SR_SYNC_SECURITYONION == true || $SR_SYNC_DOCKER == true ]] && {
-        tool_args_debmirror1="debmirror -a $SR_ARCH_DEBIAN --no-source --ignore-small-errors"
-        tool_args_debmirror1+=" --method=rsync --retry-rsync-packages=5 -p --rsync-options="
-        tool_args_debmirror2="debmirror -a $SR_ARCH_DEBIAN --no-source --ignore-small-errors"
-        tool_args_debmirror2+=" --method=http --checksums -p"
-        tool_args_debmirror3="debmirror -a $SR_ARCH_DEBIAN --no-source --ignore-small-errors"
-        tool_args_debmirror3+=" --method=https --checksums -p"
+        tool_args_debmirror1=(debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors)
+        tool_args_debmirror1+=(--method=rsync --retry-rsync-packages=5 -p "--rsync-options='${SR_OPTS_RSYNC[*]}'")
+        tool_args_debmirror2=(debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors)
+        tool_args_debmirror2+=(--method=http --checksums -p)
+        tool_args_debmirror3=(debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors)
+        tool_args_debmirror3+=(--method=https --checksums -p)
     }
 
     # And a few more (ClamAV)
     [[ $SR_SYNC_CLAMAV == true ]] &&
-        tool_args_clamavmirror="clamavmirror -a $SR_MIRROR_CLAMAV -d $SR_REPO_CLAMAV -u root -g www-data"
+        tool_args_clamavmirror=(clamavmirror -a "$SR_MIRROR_CLAMAV" -d "$SR_REPO_CLAMAV")
+        tool_args_clamavmirror+=(-u "$SR_REPO_CHOWN_UID" -g "$SR_REPO_CHOWN_GID")
 
+    IFS=' '
     return 0
 }
 
@@ -371,7 +375,7 @@ syncrepo.sync_ubuntu() {
     # Sync ubuntu repository
     utils.say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_UBUNTU"
-    $tool_args_debmirror2 "$ubuntu_sync_args" "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${ubuntu_sync_args[@]}" "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -387,7 +391,7 @@ syncrepo.sync_debian() {
     # Sync debian repository
     utils.say 'Beginning sync of Debian %s and %s repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN"
-    $tool_args_debmirror2 "$debian_sync_args" "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${debian_sync_args[@]}" "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -403,7 +407,7 @@ syncrepo.sync_debian_security() {
     # Sync debian security repository
     utils.say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN_SECURITY"
-    $tool_args_debmirror2 "$debian_sync_args_security" "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${debian_sync_args_security[@]}" "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -419,7 +423,7 @@ syncrepo.sync_securityonion() {
     # Sync security onion repository
     utils.say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_SECURITYONION"
-    $tool_args_debmirror2 "$securityonion_sync_args" "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${securityonion_sync_args[@]}" "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -438,21 +442,21 @@ syncrepo.sync_docker() {
     [[ $SR_SYNC_CENTOS == true ]] && {
         utils.say 'Beginning sync of Docker Centos %s repository from %s.' \
             "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
-        $docker_sync_args &>>"$SR_FILE_LOG_PROGRESS"
+        "${docker_sync_args[@]}" &>>"$SR_FILE_LOG_PROGRESS"
         utils.say 'Done.\n'
     }
 
     [[ $SR_SYNC_UBUNTU == true ]] && {
         utils.say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
             "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
-        $tool_args_debmirror3 "$docker_sync_args_ubuntu" "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_PROGRESS"
+        "${tool_args_debmirror3[@]}" "${docker_sync_args_ubuntu[@]}" "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_PROGRESS"
         utils.say 'Done.\n'
     }
 
     [[ $SR_SYNC_DEBIAN == true ]] && {
         utils.say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
             "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DOCKER"
-        $tool_args_debmirror3 "$docker_sync_args_debian" "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_PROGRESS"
+        "${tool_args_debmirror3[@]}" "${docker_sync_args_debian[@]}" "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_PROGRESS"
         utils.say 'Done.\n'
     }
 
@@ -466,7 +470,7 @@ syncrepo.sync_clamav() {
 
     # Sync clamav repository
     utils.say 'Beginning sync of ClamAV repository from %s.' "$SR_MIRROR_CLAMAV"
-    $tool_args_clamavmirror &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_clamavmirror[@]}" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     return 0
