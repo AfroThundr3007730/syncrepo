@@ -10,8 +10,8 @@
 syncrepo.set_globals() {
     SR_META_AUTHOR='AfroThundr'
     SR_META_BASENAME="${0##*/}"
-    SR_META_MODIFIED='20240308'
-    SR_META_VERSION='1.8.0-rc7'
+    SR_META_MODIFIED='20240309'
+    SR_META_VERSION='1.8.0-rc8'
     SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
 
     # User can override with environment variables
@@ -67,9 +67,7 @@ syncrepo.set_globals() {
         SR_OPTS_RSYNC=(-hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file="$SR_FILE_LOG_PROGRESS")
     [[ ${SR_OPTS_TEE[*]} ]] || SR_OPTS_TEE=(tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS")
 
-    # Source a config file if it exists (an environment file)
-    # shellcheck disable=SC1090
-    for file in "${SR_FILE_CONFIG[@]}"; do [[ -f $file ]] && source "$file"; done
+    return 0
 }
 
 # Parse command line options
@@ -89,9 +87,9 @@ syncrepo.parse_arguments() {
             utils.say -h 'Software repository sync script for linux distros.'
             utils.say -h '\nCan curently sync the following components:'
             utils.say -h '  %s\n' "${SR_META_SOFTWARE[*]}"
-            utils.say -h 'Usage:\n  %s [-V] (-h | -C)' "$SR_META_BASENAME"
+            utils.say -h 'Usage:\n  %s [-V] (-h | -C [-f] [-c <config_file>])' "$SR_META_BASENAME"
             utils.say -h '  %s [-V] -y [-q|-v] [-d] [-m <mirror>] [-c <config_file>]' "$SR_META_BASENAME"
-            utils.say -h '    [-l <log_file>] [-p <progress_log>])\n'
+            utils.say -h '    [-l <log_file>] [-p <progress_log>]\n'
             utils.say -h 'Options:'
             utils.say -h '  -a|--arch         Specify architecture to sync.'
             utils.say -h '  -c|--config       Specify config file location.'
@@ -103,21 +101,23 @@ syncrepo.parse_arguments() {
             utils.say -h '  -p|--progress     Specify progress log location.'
             utils.say -h '  -m|--mirror       Specify upstream mirror.'
             utils.say -h '  -q|--quiet        Suppress console output.'
-            utils.say -h '  -s|--sync         List of components to sync.'
             utils.say -h '  -v|--verbose     Verbose output to console.'
             utils.say -h '  -V|--version      Show the version info.'
             utils.say -h '  -y|--yes          Confirm the repository sync.'
-            # TODO: Do we want these to supersede `--sync` or merge with it?
             utils.say -h '\nYou can explicitly enable components with the following:'
-            utils.say -h '  --centos-sync     Sync the CentOS repo.'
-            utils.say -h '  --clamav-sync     Sync the ClamAV repo.'
-            utils.say -h '  --debian-sync     Sync the Debian repo.'
-            utils.say -h '  --debsec-sync     Sync the Debian Secuirty repo.'
-            utils.say -h '  --epel-sync       Sync the EPEL repo.'
-            utils.say -h '  --local-sync      Sync a locally built repo.'
-            utils.say -h '  --sonion-sync     Sync the Security Onion repo.'
-            utils.say -h '  --ubuntu-sync     Sync the Ubuntu repo.'
+            utils.say -h '  --sync-all        Sync all available components.'
+            utils.say -h '  --sync-centos     Sync the CentOS repo.'
+            utils.say -h '  --sync-clamav     Sync the ClamAV repo.'
+            utils.say -h '  --sync-debian     Sync the Debian repo.'
+            utils.say -h '  --sync-debsec     Sync the Debian Secuirty repo.'
+            utils.say -h '  --sync-epel       Sync the EPEL repo.'
+            utils.say -h '  --sync-local      Sync a locally built repo.'
+            utils.say -h '  --sync-sonion     Sync the Security Onion repo.'
+            utils.say -h '  --sync-ubuntu     Sync the Ubuntu repo.'
             exit 0
+        elif [[ $1 == -c ]]; then
+            SR_META_CONFIG_MANUAL=$2
+            shift 2
         elif [[ $1 == -C ]]; then
             SR_BOOL_DUMP_CONFIG=true
             shift
@@ -140,21 +140,41 @@ syncrepo.parse_arguments() {
         fi
     done
 
-    # TODO: Move this to a function that mangles the names when dumping; adjust import logic
     [[ $SR_BOOL_DUMP_CONFIG == true ]] && {
-        [[ -f ${SR_FILE_CONFIG[0]} && ! $SR_BOOL_DUMP_CONFIG_FORCE == true ]] && {
-            utils.say -h 'Config file %s exists, use -f to overwrite.' "${SR_FILE_CONFIG[0]}"
-            exit 1
-        }
-        set | awk '/^SR_[A-Z0-9_]+=/ && !/_(BOOL|META)_/' >"${SR_FILE_CONFIG[0]}"
-        exit 0
+        syncrepo.dump_config && exit 0 || exit 1
     }
 
-    [[ ! $SR_BOOL_CONFIRMED == true && $SR_BOOL_SHOW_VERSION == true ]] || {
+    [[ ! $SR_BOOL_CONFIRMED == true ]] && {
+        [[ $SR_BOOL_SHOW_VERSION == true ]] && exit 0
         utils.say -h 'Confirm with -y to start the sync.'
         exit 1
-    } && exit 0
+    }
 
+    return 0
+}
+
+# Write config file do disk
+syncrepo.dump_config() {
+    local file=${SR_META_CONFIG_MANUAL:-${SR_FILE_CONFIG[0]}}
+    [[ -f $file && ! $SR_BOOL_DUMP_CONFIG_FORCE == true ]] && {
+        utils.say -h 'Config file %s exists, use -f to overwrite.' "$file"
+        return 1
+    }
+    utils.say -h 'Writing configuration to: %s' "$file"
+    set | awk '/^SR_/ && !/_(BOOL|META)_/ {gsub(/^SR_/,"SR_CFG_"); print $0}' >"$file"
+    return 0
+}
+
+# Read settings from config file
+# shellcheck disable=SC1090
+syncrepo.parse_config() {
+    local file files=("${SR_META_CONFIG_MANUAL:-${SR_FILE_CONFIG[@]}}")
+    for file in "${files[@]}"; do
+        [[ -s $file ]] && {
+            utils.say -h 'Reading configuration from: %s' "$file"
+            source <(awk '/^SR_CFG_/ && !/_(BOOL|META)_/ {gsub(/^SR_CFG_/,"SR_"); print $0}' "$file")
+        }
+    done
     return 0
 }
 
@@ -174,7 +194,7 @@ utils.say() {
             local say_log=true
         fi
         [[ $1 == -t ]] && {
-            echo >"$SR_FILE_LOG_PROGRESS"
+            : >"$SR_FILE_LOG_PROGRESS"
             shift
         }
         if [[ $1 == info || $1 == warn || $1 == err ]]; then
@@ -203,7 +223,6 @@ utils.say() {
 }
 
 # Record time duration, concurrent timers
-# shellcheck disable=SC2004
 utils.timer() {
     [[ $1 =~ ^[0-9]+$ ]] && {
         [[ $timer_bookmark -ge $1 ]] || timer_bookmark=$1
@@ -215,17 +234,68 @@ utils.timer() {
     [[ $1 == -c ]] && local timer_index=$timer_bookmark
     shift
     [[ -n $1 ]] || utils.say -n err 'No timer action specified.'
-    [[ $1 == start ]] && timer_starttimes[$timer_index]=$SECONDS
+    [[ $1 == start ]] && timer_starttimes[timer_index]=$SECONDS
     [[ $1 == stop ]] && {
-        [[ -n ${timer_starttimes[$timer_index]} ]] || utils.say -n err 'Timer %s not started.' "$timer_index"
-        timer_stoptimes[$timer_index]=$SECONDS
-        timer_durations[$timer_index]=$((timer_stoptimes[timer_index] - timer_starttimes[timer_index]))
+        [[ -n ${timer_starttimes[timer_index]} ]] || utils.say -n err 'Timer %s not started.' "$timer_index"
+        timer_stoptimes[timer_index]=$SECONDS
+        timer_durations[timer_index]=$((timer_stoptimes[timer_index] - timer_starttimes[timer_index]))
     }
     [[ $1 == show ]] && {
-        [[ -n ${timer_stoptimes[$timer_index]} ]] ||
-            timer_durations[$timer_index]=$((SECONDS - timer_starttimes[timer_index]))
-        echo "${timer_durations[$timer_index]}"
+        [[ -n ${timer_stoptimes[timer_index]} ]] ||
+            timer_durations[timer_index]=$((SECONDS - timer_starttimes[timer_index]))
+        utils.say -h "${timer_durations[timer_index]}"
     }
+    return 0
+}
+
+# Use wget to sync remote and local directory
+# WIP: finish wget_rsync()
+utils.wget_rsync() {
+    local delete delta_add delta_remove local_dir local_files
+    local number_dirs remote_dir remote_files wget_mirror wget_spider
+    [[ $1 == -d ]] && {
+        delete=true
+        shift
+    }
+    [[ -n $1 && -n $2 ]] || utils.say -n err 'Must supply remote and local directory.'
+    remote_dir=$1
+    local_dir=$2
+    # WIP: This can be done with one awk regex
+    [[ -n ${remote_dir##*/} ]] && # Does it have trailing slash?
+        number_dirs=$(printf '%s\n' "${remote_dir#*://*/}" | awk -F'/' '{print NF-1}') ||
+        number_dirs=$(printf '%s\n' "${remote_dir#*://*/}" | awk -F'/' '{print NF}')
+    # Spiders remote to collect file list
+    wget_spider=(wget --spider -np -nH -r --cut-dirs="$number_dirs" -r index.html -P "$local_dir" "$remote_dir")
+    # Mirrors files on remote list if not local
+    wget_mirror=(wget -c -N -np -nH -r --cut-dirs="$number_dirs" -r index.html -P "$local_dir" "$remote_dir")
+
+    # Strip host, and $number_dirs directories
+    mapfile -t remote_files <<<"$(
+        "${wget_spider[@]}" 2>&1 | awk -v ndirs="$number_dirs" \
+            '/^--/ && /[^/]$/ {
+            match($0,/^.*:\/\/[^/]*\/(.*)$/,a);
+            print substr($0,) # Trim $remote_dir
+            print a[1]
+        }'
+    )"
+    mapfile -t local_files <<<"$(
+        find "$local_dir" -type f |
+            : # WIP: Trim $local_dir
+    )"
+
+    # Compare remote list with local list
+    # WIP: Figure out the diff/comp options to return only left or right side differences
+    mapfile -t delta_add <<<"$(diff <("${remote_files[@]}") <("${local_files[@]}"))"
+    mapfile -t delta_remove <<<"$(diff <("${remote_files[@]}") <("${local_files[@]}"))"
+
+    # Sync down the deltas (need to investigate size differences?)
+    # NOTE: Maybe use here document to avoid command length limit)
+    "${wget_mirror[@]}" -- "${delta_add[@]}"
+
+    # Remove local files not on remote (optional)
+    # NOTE: Probably also need to use a here document for this
+    [[ $delete ]] && : rm -f "${delta_remove[@]}"
+
     return 0
 }
 
@@ -236,19 +306,15 @@ syncrepo.build_vars() {
     [[ $SR_SYNC_CENTOS == true || $SR_SYNC_EPEL == true || $SR_SYNC_DOCKER == true ]] && {
         mapfile -t rhel_all_releases <<<"$(
             rsync "$SR_MIRROR_CENTOS" |
-                awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
-                sort -V
+                awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}'
         )"
         mapfile -t rhel_previous_releases <<<"$(
-            for i in "${rhel_all_releases[@]}"; do
-                [[ ${i%%.*} -eq $((${rhel_all_releases[-1]%%.*} - 1)) ]] && echo "$i"
-            done
+            printf '%s\n' "${rhel_all_releases[@]}" |
+                awk -v m="^$((${rhel_all_releases[-1]%%.*} - 1))" '$0 ~ m'
         )"
         rhel_current_release=${rhel_all_releases[-1]}
-        rhel_current_major_version=${rhel_current_release%%.*}
         rhel_current_release_last=${rhel_all_releases[-2]}
         rhel_previous_release=${rhel_previous_releases[-1]}
-        rhel_previous_major_version=${rhel_previous_release%%.*}
         rhel_previous_release_last=${rhel_previous_releases[-2]}
 
         rhel_filter_rsync=(
@@ -259,7 +325,7 @@ syncrepo.build_vars() {
         epel_filter_rsync=(--exclude={SRPMS,aarch64,i386,ppc64,ppc64le,s390x,$SR_ARCH_RHEL/debug})
 
         docker_sync_args=(wget -m -np -N -nH -r --cut-dirs=1 -R index.html -P "$SR_REPO_PRIMARY/docker/")
-        docker_sync_args+=("$SR_MIRROR_DOCKER/linux/centos/$rhel_current_major_version/$SR_ARCH_RHEL/stable/")
+        docker_sync_args+=("$SR_MIRROR_DOCKER/linux/centos/${rhel_current_release%%.*}/$SR_ARCH_RHEL/stable/")
     }
 
     # Declare more variables (Debian/Ubuntu)
@@ -322,6 +388,38 @@ syncrepo.build_vars() {
     return 0
 }
 
+# Ensure environment is ready for sync
+# WIP: finish sanity_check()
+# NOTE: Connectivity checks for all mirrors
+# NOTE: Repo dir size/mount/permission checks
+# NOTE: Dependency checks for all binaries
+# NOTE: Catch nonsensical configuration issues
+syncrepo.sanity_check() {
+    # Check if the rsync script is already running
+    if [[ -f $SR_FILE_LOCKFILE ]]; then
+        utils.say err 'Detected lockfile: %s' "$SR_FILE_LOCKFILE"
+        utils.say err 'Repository updates are already running.'
+        exit 1
+    fi
+
+    # Check that we can reach the public mirror
+    if ([[ $SR_BOOL_UPSTREAM == true ]] && ! rsync "${SR_MIRROR_PRIMARY}::" &>/dev/null) ||
+        ([[ $SR_BOOL_UPSTREAM == false ]] && ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null); then
+        utils.say err 'Cannot reach the %s mirror server.' "$SR_MIRROR_PRIMARY"
+        exit 1
+    fi
+
+    # Check that the repository is mounted
+    if ! mount | grep "$SR_REPO_PRIMARY" &>/dev/null; then
+        utils.say err 'Directory %s is not mounted.' "$SR_REPO_PRIMARY"
+        exit 1
+    fi
+
+    # TODO: Dig through the other functions and move their checks here
+
+    return 0
+}
+
 syncrepo.sync_centos() {
     local repo
     for repo in $rhel_previous_release $rhel_current_release; do
@@ -361,7 +459,7 @@ syncrepo.sync_centos() {
 
 syncrepo.sync_epel() {
     local repo
-    for repo in {,testing/}{$rhel_previous_major_version,$rhel_current_major_version}; do
+    for repo in {,testing/}{${rhel_previous_release%%.*},${rhel_current_release%%.*}}; do
         # Check for epel release directory
         [[ -d $SR_REPO_EPEL/$repo ]] || mkdir -p "$SR_REPO_EPEL/$repo"
 
@@ -451,8 +549,8 @@ syncrepo.sync_docker() {
     [[ -d $SR_REPO_DOCKER ]] || mkdir -p "$SR_REPO_DOCKER"
 
     # Sync docker repository (for each enabled OS)
+    # TODO: Use wget_rsync() instead of a regular clone
 
-    # TODO: Implement `wget_rsync` method instead of a regular clone
     [[ $SR_SYNC_CENTOS == true ]] && {
         utils.say 'Beginning sync of Docker Centos %s repository from %s.' \
             "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
@@ -485,6 +583,7 @@ syncrepo.sync_clamav() {
     [[ -d $SR_REPO_CLAMAV ]] || mkdir -p "$SR_REPO_CLAMAV"
 
     # Sync clamav repository
+    # TODO: Replace with wget_rsync()
     utils.say 'Beginning sync of ClamAV repository from %s.' "$SR_MIRROR_CLAMAV"
     "${tool_args_clamavmirror[@]}" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
@@ -536,34 +635,19 @@ syncrepo.main() {
     # Set Globals
     syncrepo.set_globals
 
+    # Read config file
+    syncrepo.parse_config
+
     # Process arguments
     syncrepo.parse_arguments "$@"
 
-    # Here we go...
-    utils.say -t 'Progress log reset.'
-    utils.say 'Started synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
-    utils.say 'Use tail -f %s to view progress.' "$SR_FILE_LOG_PROGRESS"
-    utils.timer start
+    syncrepo.sanity_check && {
+        # If evrything is good, begin the sync
+        utils.say -t 'Progress log reset.'
+        utils.say 'Started synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
+        utils.say 'Use tail -f %s to view progress.' "$SR_FILE_LOG_PROGRESS"
+        utils.timer start
 
-    # Check if the rsync script is already running
-    if [[ -f $SR_FILE_LOCKFILE ]]; then
-        utils.say err 'Detected lockfile: %s' "$SR_FILE_LOCKFILE"
-        utils.say err 'Repository updates are already running.'
-        exit 1
-
-    # Check that we can reach the public mirror
-    elif ([[ $SR_BOOL_UPSTREAM == true ]] && ! rsync "${SR_MIRROR_PRIMARY}::" &>/dev/null) ||
-        ([[ $SR_BOOL_UPSTREAM == false ]] && ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null); then
-        utils.say err 'Cannot reach the %s mirror server.' "$SR_MIRROR_PRIMARY"
-        exit 1
-
-    # Check that the repository is mounted
-    elif ! mount | grep "$SR_REPO_PRIMARY" &>/dev/null; then
-        utils.say err 'Directory %s is not mounted.' "$SR_REPO_PRIMARY"
-        exit 1
-
-    # Everything is good, let's continue
-    else
         # There can be only one...
         touch "$SR_FILE_LOCKFILE"
 
@@ -573,6 +657,8 @@ syncrepo.main() {
             syncrepo.build_vars
 
             # Sync every enabled repo
+            # WIP: Maybe move these guards inside their respective functions
+            #   Then we could remove sync_downstream and inline that too
             [[ $SR_SYNC_CENTOS          == true ]] && syncrepo.sync_centos
             [[ $SR_SYNC_EPEL            == true ]] && syncrepo.sync_epel
             [[ $SR_SYNC_UBUNTU          == true ]] && syncrepo.sync_ubuntu
@@ -584,6 +670,7 @@ syncrepo.main() {
             [[ $SR_SYNC_LOCAL           == true ]] && syncrepo.sync_local
         else
             # Do a downstream sync
+            # TODO: This should probably be empty until set by the user
             SR_MIRROR_UPSTREAM=${SR_MIRROR_UPSTREAM:-$SR_MIRROR_PRIMARY} && syncrepo.sync_downstream
         fi
 
@@ -593,13 +680,14 @@ syncrepo.main() {
 
         # Clear the lockfile
         rm -f "$SR_FILE_LOCKFILE"
-    fi
 
-    # Now we're done
-    utils.timer stop
-    utils.say 'Completed synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
-    utils.say 'Total duration: %d seconds. Current repository size: %s.\n' \
-        "$(utils.timer show)" "$(du -hs "$SR_REPO_PRIMARY" | awk '{print $1}')"
+        # Now we're done
+        utils.timer stop
+        utils.say 'Completed synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
+        utils.say 'Total duration: %d seconds. Current repository size: %s.\n' \
+            "$(utils.timer show)" "$(du -hs "$SR_REPO_PRIMARY" | awk '{print $1}')"
+    }
+
     exit 0
 }
 
