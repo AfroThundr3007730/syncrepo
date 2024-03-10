@@ -2,12 +2,16 @@
 # Repository sync script for CentOS & Debian distros
 # This script can sync the repos listed in $SR_META_SOFTWARE
 
+# TODO: Implement support for Rocky (and maybe Alma)
+# TODO: Implement support for RHEL based SecurityOnion
+# TODO: Implement Docker registry sync logic (also podman registry)
+
 # Initialize global config variables
 syncrepo.set_globals() {
     SR_META_AUTHOR='AfroThundr'
     SR_META_BASENAME="${0##*/}"
     SR_META_MODIFIED='20240308'
-    SR_META_VERSION='1.8.0-rc6'
+    SR_META_VERSION='1.8.0-rc7'
     SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
 
     # User can override with environment variables
@@ -125,7 +129,7 @@ syncrepo.parse_arguments() {
             shift
         elif [[ $1 == -v ]]; then
             # TODO: Implement verbose or remove this
-            SR_BOOL_VERBOSE=true
+            : SR_BOOL_VERBOSE=true
             shift
         elif [[ $1 == -y ]]; then
             SR_BOOL_CONFIRMED=true
@@ -193,6 +197,7 @@ utils.say() {
             [[ $SR_BOOL_QUIET == true ]] || printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@"
         fi
     fi
+    # TODO: Test the tput combinations on multiple distros
     tput setaf 7 # For CentOS
     return 0
 }
@@ -308,9 +313,10 @@ syncrepo.build_vars() {
     }
 
     # And a few more (ClamAV)
-    [[ $SR_SYNC_CLAMAV == true ]] &&
+    [[ $SR_SYNC_CLAMAV == true ]] && {
         tool_args_clamavmirror=(clamavmirror -a "$SR_MIRROR_CLAMAV" -d "$SR_REPO_CLAMAV")
         tool_args_clamavmirror+=(-u "$SR_REPO_CHOWN_UID" -g "$SR_REPO_CHOWN_GID")
+    }
 
     IFS=' '
     return 0
@@ -325,7 +331,8 @@ syncrepo.sync_centos() {
         # Sync current centos repository
         utils.say 'Beginning sync of CentOS %s repository from %s.' \
             "$repo" "$SR_MIRROR_CENTOS"
-        rsync "${SR_OPTS_RSYNC[@]}" "${rhel_filter_rsync[@]}" "$SR_MIRROR_CENTOS/$repo/" "$SR_REPO_CENTOS/$repo/"
+        rsync "${SR_OPTS_RSYNC[@]}" "${rhel_filter_rsync[@]}" \
+            "$SR_MIRROR_CENTOS/$repo/" "$SR_REPO_CENTOS/$repo/"
         utils.say 'Done.\n'
 
         # Create the symlink, or move, if necessary
@@ -343,7 +350,8 @@ syncrepo.sync_centos() {
             # Sync previous centos repository
             utils.say 'Beginning sync of CentOS %s repository from %s.' \
                 "$repo" "$SR_MIRROR_CENTOS"
-            rsync "${SR_OPTS_RSYNC[@]}" "${rhel_filter_rsync[@]}" "$SR_MIRROR_CENTOS/$repo/" "$SR_REPO_CENTOS/$repo/"
+            rsync "${SR_OPTS_RSYNC[@]}" "${rhel_filter_rsync[@]}" \
+                "$SR_MIRROR_CENTOS/$repo/" "$SR_REPO_CENTOS/$repo/"
             utils.say 'Done.\n'
         }
     done
@@ -358,8 +366,10 @@ syncrepo.sync_epel() {
         [[ -d $SR_REPO_EPEL/$repo ]] || mkdir -p "$SR_REPO_EPEL/$repo"
 
         # Sync epel repository
-        utils.say 'Beginning sync of EPEL %s repository from %s.' "$repo" "$SR_MIRROR_EPEL"
-        rsync "${SR_OPTS_RSYNC[@]}" "${epel_filter_rsync[@]}" "$SR_MIRROR_EPEL/$repo/" "$SR_REPO_EPEL/$repo/"
+        utils.say 'Beginning sync of EPEL %s repository from %s.' \
+            "$repo" "$SR_MIRROR_EPEL"
+        rsync "${SR_OPTS_RSYNC[@]}" "${epel_filter_rsync[@]}" \
+            "$SR_MIRROR_EPEL/$repo/" "$SR_REPO_EPEL/$repo/"
         utils.say 'Done.\n'
     done
 
@@ -375,7 +385,8 @@ syncrepo.sync_ubuntu() {
     # Sync ubuntu repository
     utils.say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_UBUNTU"
-    "${tool_args_debmirror2[@]}" "${ubuntu_sync_args[@]}" "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${ubuntu_sync_args[@]}" \
+        "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -391,7 +402,8 @@ syncrepo.sync_debian() {
     # Sync debian repository
     utils.say 'Beginning sync of Debian %s and %s repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN"
-    "${tool_args_debmirror2[@]}" "${debian_sync_args[@]}" "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${debian_sync_args[@]}" \
+        "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -407,7 +419,8 @@ syncrepo.sync_debian_security() {
     # Sync debian security repository
     utils.say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN_SECURITY"
-    "${tool_args_debmirror2[@]}" "${debian_sync_args_security[@]}" "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${debian_sync_args_security[@]}" \
+        "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -423,7 +436,8 @@ syncrepo.sync_securityonion() {
     # Sync security onion repository
     utils.say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_SECURITYONION"
-    "${tool_args_debmirror2[@]}" "${securityonion_sync_args[@]}" "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_debmirror2[@]}" "${securityonion_sync_args[@]}" \
+        "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_PROGRESS"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -449,14 +463,16 @@ syncrepo.sync_docker() {
     [[ $SR_SYNC_UBUNTU == true ]] && {
         utils.say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
             "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
-        "${tool_args_debmirror3[@]}" "${docker_sync_args_ubuntu[@]}" "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_PROGRESS"
+        "${tool_args_debmirror3[@]}" "${docker_sync_args_ubuntu[@]}" \
+            "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_PROGRESS"
         utils.say 'Done.\n'
     }
 
     [[ $SR_SYNC_DEBIAN == true ]] && {
         utils.say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
             "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DOCKER"
-        "${tool_args_debmirror3[@]}" "${docker_sync_args_debian[@]}" "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_PROGRESS"
+        "${tool_args_debmirror3[@]}" "${docker_sync_args_debian[@]}" \
+            "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_PROGRESS"
         utils.say 'Done.\n'
     }
 
