@@ -2,25 +2,29 @@
 # Repository sync script for CentOS & Debian distros
 # This script can sync the repos listed in $SR_META_SOFTWARE
 
+set -euo pipefail
+shopt -s extdebug
+
 # TODO: Implement support for Rocky (and maybe Alma)
 # TODO: Implement support for RHEL based SecurityOnion
 # TODO: Implement Docker registry sync logic (also podman registry)
+# TODO: Fix upstream/downstream logic and detection (also variables)
 
 # Parse command line options
 syncrepo.parse_arguments() {
     SR_META_AUTHOR='AfroThundr'
     SR_META_BASENAME="${0##*/}"
     SR_META_MODIFIED='20240310'
-    SR_META_VERSION='1.8.0-rc9'
+    SR_META_VERSION='1.8.0-rc10'
     SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
     SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
 
-    [[ -n $1 ]] || {
+    [[ $# -gt 0 ]] || {
         utils.say -h 'No arguments specified, use -h for help.'
         exit 1
     }
 
-    while [[ -n $1 ]]; do
+    while [[ $# -gt 0 ]]; do
         if [[ $1 == -V ]]; then
             utils.say -h '%s: Version %s, updated %s by %s' \
                 "$SR_META_BASENAME" "$SR_META_VERSION" "$SR_META_MODIFIED" "$SR_META_AUTHOR"
@@ -31,8 +35,9 @@ syncrepo.parse_arguments() {
             utils.say -h '  %s\n' "${SR_META_SOFTWARE[*]}"
             utils.say -h 'Usage:\n  %s -V | -h | -C [-f] [-c <config_file>]' "$SR_META_BASENAME"
             utils.say -h '  %s -y [-q|-v] [-d] [-m <mirror>] [-c <config_file>]' "$SR_META_BASENAME"
-            utils.say -h '    [-l <log_file>] [-p <progress_log>]\n'
-            utils.say -h 'Options:'
+            utils.say -h '    [-l <log_file>] [-p <progress_log>]'
+            utils.say -h '    [-A|--sync-all] [<component_options>...]'
+            utils.say -h '\nOptions:'
             utils.say -h '  -a|--arch         Specify architecture to sync.'
             utils.say -h '  -c|--config       Specify config file location.'
             utils.say -h '  -C|--config-save  Saves default values to a config file.'
@@ -67,11 +72,11 @@ syncrepo.parse_arguments() {
             SR_BOOL_SAVE_CONFIG_FORCE=true
             shift
         elif [[ $1 == -q ]]; then
-            SR_BOOL_QUIET=true
+            QUIET=true
             shift
         elif [[ $1 == -v ]]; then
             # TODO: Implement verbose or remove this
-            : SR_BOOL_VERBOSE=true
+            : VERBOSE=true
             shift
         elif [[ $1 == -y ]]; then
             SR_BOOL_CONFIRMED=true
@@ -92,100 +97,101 @@ syncrepo.set_globals() {
     utils.call syncrepo.load_config
 
     # User can override with a config file or environment variables
-    [[ $SR_BOOL_UPSTREAM ]] ||
+    [[ ${SR_BOOL_UPSTREAM:-} ]] ||
         SR_BOOL_UPSTREAM=${SR_CFG_BOOL_UPSTREAM:-true}
-    [[ $SR_SYNC_ALL_REPOS ]] ||
+    [[ ${SR_SYNC_ALL_REPOS:-} ]] ||
         SR_SYNC_ALL_REPOS=${SR_CFG_SYNC_ALL_REPOS:-false}
-    [[ $SR_SYNC_CENTOS ]] ||
+    [[ ${SR_SYNC_CENTOS:-} ]] ||
         SR_SYNC_CENTOS=${SR_CFG_SYNC_CENTOS:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_EPEL ]] ||
+    [[ ${SR_SYNC_EPEL:-} ]] ||
         SR_SYNC_EPEL=${SR_CFG_SYNC_EPEL:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_DEBIAN ]] ||
+    [[ ${SR_SYNC_DEBIAN:-} ]] ||
         SR_SYNC_DEBIAN=${SR_CFG_SYNC_DEBIAN:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_DEBIAN_SECURITY ]] ||
+    [[ ${SR_SYNC_DEBIAN_SECURITY:-} ]] ||
         SR_SYNC_DEBIAN_SECURITY=${SR_CFG_SYNC_DEBIAN_SECURITY:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_UBUNTU ]] ||
+    [[ ${SR_SYNC_UBUNTU:-} ]] ||
         SR_SYNC_UBUNTU=${SR_CFG_SYNC_UBUNTU:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_SECURITYONION ]] ||
+    [[ ${SR_SYNC_SECURITYONION:-} ]] ||
         SR_SYNC_SECURITYONION=${SR_CFG_SYNC_SECURITYONION:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_DOCKER ]] ||
+    [[ ${SR_SYNC_DOCKER:-} ]] ||
         SR_SYNC_DOCKER=${SR_CFG_SYNC_DOCKER:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_CLAMAV ]] ||
+    [[ ${SR_SYNC_CLAMAV:-} ]] ||
         SR_SYNC_CLAMAV=${SR_CFG_SYNC_CLAMAV:-$SR_SYNC_ALL_REPOS}
-    [[ $SR_SYNC_LOCAL ]] ||
+    [[ ${SR_SYNC_LOCAL:-} ]] ||
         SR_SYNC_LOCAL=${SR_CFG_SYNC_LOCAL:-$SR_SYNC_ALL_REPOS}
 
-    [[ $SR_REPO_PRIMARY ]] ||
+    [[ ${SR_REPO_PRIMARY:-} ]] ||
         SR_REPO_PRIMARY=${SR_CFG_REPO_PRIMARY:-/srv/repository}
-    [[ $SR_REPO_CHOWN_UID ]] ||
+    [[ ${SR_REPO_CHOWN_UID:-} ]] ||
         SR_REPO_CHOWN_UID=${SR_CFG_REPO_CHOWN_UID:-root}
-    [[ $SR_REPO_CHOWN_GID ]] ||
+    [[ ${SR_REPO_CHOWN_GID:-} ]] ||
         SR_REPO_CHOWN_GID=${SR_CFG_REPO_CHOWN_GID:-www-data}
-    [[ $SR_FILE_LOCKFILE ]] ||
+    [[ ${SR_FILE_LOCKFILE:-} ]] ||
         SR_FILE_LOCKFILE=${SR_CFG_FILE_LOCKFILE:-/var/lock/subsys/syncrepo}
-    [[ $SR_FILE_LOG_MAIN ]] ||
+    [[ ${SR_FILE_LOG_MAIN:-} ]] ||
         SR_FILE_LOG_MAIN=${SR_CFG_FILE_LOG_MAIN:-/var/log/syncrepo.log}
-    [[ $SR_FILE_LOG_PROGRESS ]] ||
+    [[ ${SR_FILE_LOG_PROGRESS:-} ]] ||
         SR_FILE_LOG_PROGRESS=${SR_CFG_FILE_LOG_PROGRESS:-/var/log/syncrepo_progress.log}
 
-    [[ $SR_MIRROR_PRIMARY ]] ||
+    [[ ${SR_MIRROR_PRIMARY:-} ]] ||
         SR_MIRROR_PRIMARY=${SR_CFG_MIRROR_PRIMARY:-mirrors.mit.edu}
-    [[ $SR_MIRROR_UPSTREAM ]] ||
+    [[ ${SR_MIRROR_UPSTREAM:-} ]] ||
         SR_MIRROR_UPSTREAM=${SR_CFG_MIRROR_UPSTREAM:-mirror-us.lab.local}
 
-    [[ $SR_ARCH_RHEL ]] ||
+    [[ ${SR_ARCH_RHEL:-} ]] ||
         SR_ARCH_RHEL=${SR_CFG_ARCH_RHEL:-x86_64}
-    [[ $SR_REPO_CENTOS ]] ||
+    [[ ${SR_REPO_CENTOS:-} ]] ||
         SR_REPO_CENTOS=${SR_CFG_REPO_CENTOS:-${SR_REPO_PRIMARY}/centos}
-    [[ $SR_MIRROR_CENTOS ]] ||
+    [[ ${SR_MIRROR_CENTOS:-} ]] ||
         SR_MIRROR_CENTOS=${SR_CFG_MIRROR_CENTOS:-${SR_MIRROR_PRIMARY}::-entos}
-    [[ $SR_REPO_EPEL ]] ||
+    [[ ${SR_REPO_EPEL:-} ]] ||
         SR_REPO_EPEL=${SR_CFG_REPO_EPEL:-${SR_REPO_PRIMARY}/fedora-epel}
-    [[ $SR_MIRROR_EPEL ]] ||
+    [[ ${SR_MIRROR_EPEL:-} ]] ||
         SR_MIRROR_EPEL=${SR_CFG_MIRROR_EPEL:-${SR_MIRROR_PRIMARY}::-edora-epel}
 
-    [[ $SR_ARCH_DEBIAN ]] ||
+    [[ ${SR_ARCH_DEBIAN:-} ]] ||
         SR_ARCH_DEBIAN=${SR_CFG_ARCH_DEBIAN:-amd64}
-    [[ $SR_REPO_UBUNTU ]] ||
+    [[ ${SR_REPO_UBUNTU:-} ]] ||
         SR_REPO_UBUNTU=${SR_CFG_REPO_UBUNTU:-${SR_REPO_PRIMARY}/ubuntu}
-    [[ $SR_MIRROR_UBUNTU ]] ||
+    [[ ${SR_MIRROR_UBUNTU:-} ]] ||
         SR_MIRROR_UBUNTU=${SR_CFG_MIRROR_UBUNTU:-${SR_MIRROR_PRIMARY}::-buntu}
-    [[ $SR_REPO_DEBIAN ]] ||
+    [[ ${SR_REPO_DEBIAN:-} ]] ||
         SR_REPO_DEBIAN=${SR_CFG_REPO_DEBIAN:-${SR_REPO_PRIMARY}/debian}
-    [[ $SR_MIRROR_DEBIAN ]] ||
+    [[ ${SR_MIRROR_DEBIAN:-} ]] ||
         SR_MIRROR_DEBIAN=${SR_CFG_MIRROR_DEBIAN:-${SR_MIRROR_PRIMARY}::-ebian}
 
-    [[ $SR_MIRROR_DEBIAN_SECURITY ]] ||
+    [[ ${SR_MIRROR_DEBIAN_SECURITY:-} ]] ||
         SR_MIRROR_DEBIAN_SECURITY=${SR_CFG_MIRROR_DEBIAN_SECURITY:-security.debian.org}
-    [[ $SR_REPO_DEBIAN_SECURITY ]] ||
+    [[ ${SR_REPO_DEBIAN_SECURITY:-} ]] ||
         SR_REPO_DEBIAN_SECURITY=${SR_CFG_REPO_DEBIAN_SECURITY:-${SR_REPO_PRIMARY}/debian-security}
 
-    [[ $SR_MIRROR_SECURITYONION ]] ||
+    [[ ${SR_MIRROR_SECURITYONION:-} ]] ||
         SR_MIRROR_SECURITYONION=${SR_CFG_MIRROR_SECURITYONION:-ppa.launchpad.net}
-    [[ $SR_REPO_SECURITYONION ]] ||
+    [[ ${SR_REPO_SECURITYONION:-} ]] ||
         SR_REPO_SECURITYONION=${SR_CFG_REPO_SECURITYONION:-${SR_REPO_PRIMARY}/securityonion}
 
-    [[ $SR_MIRROR_DOCKER ]] ||
+    [[ ${SR_MIRROR_DOCKER:-} ]] ||
         SR_MIRROR_DOCKER=${SR_CFG_MIRROR_DOCKER:-download.docker.com}
-    [[ $SR_REPO_DOCKER ]] ||
+    [[ ${SR_REPO_DOCKER:-} ]] ||
         SR_REPO_DOCKER=${SR_CFG_REPO_DOCKER:-${SR_REPO_PRIMARY}/docker}
 
-    [[ $SR_MIRROR_CLAMAV ]] ||
+    [[ ${SR_MIRROR_CLAMAV:-} ]] ||
         SR_MIRROR_CLAMAV=${SR_CFG_MIRROR_CLAMAV:-database.clamav.net}
-    [[ $SR_REPO_CLAMAV ]] ||
+    [[ ${SR_REPO_CLAMAV:-} ]] ||
         SR_REPO_CLAMAV=${SR_CFG_REPO_CLAMAV:-${SR_REPO_PRIMARY}/clamav}
 
-    [[ ${SR_OPTS_RSYNC[*]} ]] || {
-        [[ $SR_CFG_OPTS_RSYNC ]] && SR_OPTS_RSYNC=("${SR_CFG_OPTS_RSYNC[@]}") ||
+    [[ ${SR_OPTS_RSYNC[*]:-} ]] || {
+        [[ ${SR_CFG_OPTS_RSYNC[*]:-} ]] && SR_OPTS_RSYNC=("${SR_CFG_OPTS_RSYNC[@]}") ||
             SR_OPTS_RSYNC=(--hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file="$SR_FILE_LOG_PROGRESS")
     }
-    [[ ${SR_OPTS_TEE[*]} ]] || {
-        [[ $SR_CFG_OPTS_TEE ]] && SR_OPTS_TEE=("${SR_CFG_OPTS_TEE[@]}") ||
+    [[ ${SR_OPTS_TEE[*]:-} ]] || {
+        [[ ${SR_CFG_OPTS_TEE[*]:-} ]] && SR_OPTS_TEE=("${SR_CFG_OPTS_TEE[@]}") ||
             SR_OPTS_TEE=(tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS")
     }
 
     for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
     utils.call syncrepo.save_config
+    utils.say init "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS" "${SR_OPTS_TEE[@]}"
     return 0
 }
 
@@ -204,9 +210,9 @@ syncrepo.load_config() {
 
 # Write config file do disk
 syncrepo.save_config() {
-    [[ $SR_BOOL_SAVE_CONFIG == true ]] && {
+    [[ ${SR_BOOL_SAVE_CONFIG:-} == true ]] && {
         local file=${SR_META_CONFIG_MANUAL:-${SR_META_CONFIGS[0]}}
-        [[ -f $file && ! $SR_BOOL_SAVE_CONFIG_FORCE == true ]] && {
+        [[ -f $file && ! ${SR_BOOL_SAVE_CONFIG_FORCE:-} == true ]] && {
             utils.say -h 'Config file %s exists, use -f to overwrite.' "$file"
             exit 1
         }
@@ -219,57 +225,57 @@ syncrepo.save_config() {
 
 # Debug wrapper to trace function calls
 utils.call() {
+    [[ $# -gt 0 ]] || return 1
     local name=$1 && shift
-    utils.say -d 'entering %s' "$name"
+    call_count=${call_count:-2}
+    utils.say -d '%-*s enter %s' $((call_count++)) '->' "$name"
     "$name" "$@"
-    utils.say -d 'leaving %s' "$name"
+    utils.say -d '%-*s leave %s' $((--call_count)) '<-' "$name"
 }
 
 # Log message and print to stdout
 # shellcheck disable=SC2059
 utils.say() {
-    export TERM=${TERM:-xterm}
-    if [[ $1 == -h || $1 == -d ]]; then
-        [[ $1 == -h ]] && {
-            tput setaf 2
-            local say_format=$2
-            shift 2
-            printf "$say_format\\n" "$@"
-        }
-        [[ $1 == -d && $SR_BOOL_DEBUG ]] && {
-            tput setaf 6
-            local say_format=$2
-            shift 2
-            printf "$say_format\\n" "$@"
-        }
+    [[ $# -gt 0 ]] || return 1
+    [[ $1 != init && ! ${say_file_log:-} ]] && utils.say init
+    if [[ $1 == init ]]; then
+        export TERM=${TERM:-xterm}
+        say_file_log=${2:-/dev/null}
+        say_file_prog=${3:-/dev/null}
+        [[ $# -eq 1 ]] && say_tee=(:) && return 0
+        shift 3 && say_tee=("$@")
+    elif [[ $1 == -h ]]; then
+        local say_format=$2 && shift 2
+        tput setaf 2
+        printf "$say_format\\n" "$@"
+    elif [[ $1 == -d ]]; then
+        [[ ${DEBUG:-} ]] || return 0
+        local say_format=$2 && shift 2
+        tput setaf 6
+        printf "$say_format\\n" "$@"
     else
-        if [[ $SR_FILE_LOG_MAIN == no || $1 == -n ]]; then
+        if [[ $say_file_log == no || $1 == -n ]]; then
             [[ $1 == -n ]] && shift
         else
             local say_log=true
         fi
-        [[ $1 == -t ]] && {
-            : >"$SR_FILE_LOG_PROGRESS"
-            shift
-        }
+        [[ $1 == -t ]] && : >"$say_file_prog" && shift
         if [[ $1 == info || $1 == warn || $1 == err ]]; then
             [[ $1 == info ]] && tput setaf 4
             [[ $1 == warn ]] && tput setaf 3
             [[ $1 == err ]] && tput setaf 1
-            local say_format="${1^^}: $2"
-            shift 2
+            local say_format="${1^^}: $2" && shift 2
         else
-            local say_format="$1"
-            shift
+            local say_format="$1" && shift
         fi
-        if [[ $say_log == true ]]; then
-            if [[ $SR_BOOL_QUIET == true ]]; then
-                printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@" | "${SR_OPTS_TEE[@]}" >/dev/null
+        if [[ ${say_log:-} == true ]]; then
+            if [[ ${QUIET:-} == true ]]; then
+                printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@" | "${say_tee[@]}" >/dev/null
             else
-                printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@" | "${SR_OPTS_TEE[@]}"
+                printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@" | "${say_tee[@]}"
             fi
         else
-            [[ $SR_BOOL_QUIET == true ]] || printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@"
+            [[ ${QUIET:-} == true ]] || printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@"
         fi
     fi
     # TODO: Test the tput combinations on multiple distros
@@ -279,24 +285,25 @@ utils.say() {
 
 # Record time duration, concurrent timers
 utils.timer() {
+    [[ $# -gt 0 ]] || return 1
+    local timer_index=0
     [[ $1 =~ ^[0-9]+$ ]] && {
-        [[ $timer_bookmark -ge $1 ]] || timer_bookmark=$1
-        local timer_index=$1
-        shift
+        [[ ${timer_bookmark:=0} -ge $1 ]] || timer_bookmark=$1
+        timer_index=$1 && shift
     }
     [[ $1 == -n ]] && ((timer_bookmark++))
     [[ $1 == -p ]] && ((timer_bookmark--))
-    [[ $1 == -c ]] && local timer_index=$timer_bookmark
+    [[ $1 == -c ]] && timer_index=${timer_bookmark:=0}
     shift
-    [[ -n $1 ]] || utils.say -n err 'No timer action specified.'
+    [[ $# -gt 0 ]] || utils.say -n err 'No timer action specified.'
     [[ $1 == start ]] && timer_starttimes[timer_index]=$SECONDS
     [[ $1 == stop ]] && {
-        [[ -n ${timer_starttimes[timer_index]} ]] || utils.say -n err 'Timer %s not started.' "$timer_index"
+        [[ ${timer_starttimes[timer_index]:-} ]] || utils.say -n err 'Timer %s not started.' "$timer_index"
         timer_stoptimes[timer_index]=$SECONDS
         timer_durations[timer_index]=$((timer_stoptimes[timer_index] - timer_starttimes[timer_index]))
     }
     [[ $1 == show ]] && {
-        [[ -n ${timer_stoptimes[timer_index]} ]] ||
+        [[ ${timer_stoptimes[timer_index]:-} ]] ||
             timer_durations[timer_index]=$((SECONDS - timer_starttimes[timer_index]))
         utils.say -h "${timer_durations[timer_index]}"
     }
@@ -306,17 +313,15 @@ utils.timer() {
 # Use wget to sync remote and local directory
 # WIP: finish wget_rsync()
 utils.wget_rsync() {
+    [[ $# -gt 0 ]] || return 1
     local delete delta_add delta_remove local_dir local_files
     local number_dirs remote_dir remote_files wget_mirror wget_spider
-    [[ $1 == -d ]] && {
-        delete=true
-        shift
-    }
-    [[ -n $1 && -n $2 ]] || utils.say -n err 'Must supply remote and local directory.'
+    [[ $1 == -d ]] && delete=true && shift
+    [[ $# -ge 2 ]] || utils.say -n err 'Must supply remote and local directory.'
     remote_dir=$1
     local_dir=$2
     # WIP: This can be done with one awk regex
-    [[ -n ${remote_dir##*/} ]] && # Does it have trailing slash?
+    [[ ${remote_dir##*/} ]] && # Does it have trailing slash?
         number_dirs=$(printf '%s\n' "${remote_dir#*://*/}" | awk -F'/' '{print NF-1}') ||
         number_dirs=$(printf '%s\n' "${remote_dir#*://*/}" | awk -F'/' '{print NF}')
     # Spiders remote to collect file list
@@ -349,7 +354,7 @@ utils.wget_rsync() {
 
     # Remove local files not on remote (optional)
     # NOTE: Probably also need to use a here document for this
-    [[ $delete ]] && : rm -f "${delta_remove[@]}"
+    [[ ${delete:-} ]] && : rm -f "${delta_remove[@]}"
 
     return 0
 }
@@ -656,7 +661,7 @@ syncrepo.sync_downstream() {
     local repo package_list
     utils.say 'Configured as downstream, so mirroring local upstream.'
 
-    [[ -n $SR_MIRROR_UPSTREAM ]] || {
+    [[ $SR_MIRROR_UPSTREAM ]] || {
         utils.say err 'SR_MIRROR_UPSTREAM is empty or not set.'
         exit 1
     }
@@ -681,7 +686,7 @@ syncrepo.sync_downstream() {
     [[ $SR_SYNC_LOCAL == true ]] &&
         package_list+=(local)
 
-    [[ -n ${package_list[*]} ]] || {
+    [[ ${package_list[*]:-} ]] || {
         utils.say err 'No repos enabled for sync.'
         exit 1
     }
