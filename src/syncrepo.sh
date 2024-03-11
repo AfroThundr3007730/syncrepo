@@ -662,15 +662,24 @@ syncrepo.sync_downstream() {
     }
 
     # Build array of repos to sync downstream
-    [[ $SR_SYNC_CENTOS          == true ]] && package_list+=(centos)
-    [[ $SR_SYNC_EPEL            == true ]] && package_list+=(fedora-epel)
-    [[ $SR_SYNC_UBUNTU          == true ]] && package_list+=(ubuntu)
-    [[ $SR_SYNC_DEBIAN          == true ]] && package_list+=(debian)
-    [[ $SR_SYNC_DEBIAN_SECURITY == true ]] && package_list+=(debian-security)
-    [[ $SR_SYNC_SECURITYONION   == true ]] && package_list+=(securityonion)
-    [[ $SR_SYNC_DOCKER          == true ]] && package_list+=(docker)
-    [[ $SR_SYNC_CLAMAV          == true ]] && package_list+=(clamav)
-    [[ $SR_SYNC_LOCAL           == true ]] && package_list+=(local)
+    [[ $SR_SYNC_CENTOS == true ]] &&
+        package_list+=(centos)
+    [[ $SR_SYNC_EPEL == true ]] &&
+        package_list+=(fedora-epel)
+    [[ $SR_SYNC_UBUNTU == true ]] &&
+        package_list+=(ubuntu)
+    [[ $SR_SYNC_DEBIAN == true ]] &&
+        package_list+=(debian)
+    [[ $SR_SYNC_DEBIAN_SECURITY == true ]] &&
+        package_list+=(debian-security)
+    [[ $SR_SYNC_SECURITYONION == true ]] &&
+        package_list+=(securityonion)
+    [[ $SR_SYNC_DOCKER == true ]] &&
+        package_list+=(docker)
+    [[ $SR_SYNC_CLAMAV == true ]] &&
+        package_list+=(clamav)
+    [[ $SR_SYNC_LOCAL == true ]] &&
+        package_list+=(local)
 
     [[ -n ${package_list[*]} ]] || {
         utils.say err 'No repos enabled for sync.'
@@ -717,15 +726,24 @@ syncrepo.main() {
             # Sync every enabled repo
             # WIP: Maybe move these guards inside their respective functions
             #   Then we could remove sync_downstream and inline that too
-            [[ $SR_SYNC_CENTOS          == true ]] && utils.call syncrepo.sync_centos
-            [[ $SR_SYNC_EPEL            == true ]] && utils.call syncrepo.sync_epel
-            [[ $SR_SYNC_UBUNTU          == true ]] && utils.call syncrepo.sync_ubuntu
-            [[ $SR_SYNC_DEBIAN          == true ]] && utils.call syncrepo.sync_debian
-            [[ $SR_SYNC_DEBIAN_SECURITY == true ]] && utils.call syncrepo.sync_debian_security
-            [[ $SR_SYNC_SECURITYONION   == true ]] && utils.call syncrepo.sync_securityonion
-            [[ $SR_SYNC_DOCKER          == true ]] && utils.call syncrepo.sync_docker
-            [[ $SR_SYNC_CLAMAV          == true ]] && utils.call syncrepo.sync_clamav
-            [[ $SR_SYNC_LOCAL           == true ]] && utils.call syncrepo.sync_local
+            [[ $SR_SYNC_CENTOS == true ]] &&
+                utils.call syncrepo.sync_centos
+            [[ $SR_SYNC_EPEL == true ]] &&
+                utils.call syncrepo.sync_epel
+            [[ $SR_SYNC_UBUNTU == true ]] &&
+                utils.call syncrepo.sync_ubuntu
+            [[ $SR_SYNC_DEBIAN == true ]] &&
+                utils.call syncrepo.sync_debian
+            [[ $SR_SYNC_DEBIAN_SECURITY == true ]] &&
+                utils.call syncrepo.sync_debian_security
+            [[ $SR_SYNC_SECURITYONION == true ]] &&
+                utils.call syncrepo.sync_securityonion
+            [[ $SR_SYNC_DOCKER == true ]] &&
+                utils.call syncrepo.sync_docker
+            [[ $SR_SYNC_CLAMAV == true ]] &&
+                utils.call syncrepo.sync_clamav
+            [[ $SR_SYNC_LOCAL == true ]] &&
+                utils.call syncrepo.sync_local
         else
             # Do a downstream sync
             # TODO: This should probably be empty until set by the user
