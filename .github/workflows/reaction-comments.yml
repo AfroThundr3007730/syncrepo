@@ -1,0 +1,25 @@
+name: Reaction Comments Workflow
+
+on:
+  issue_comment:
+    types: [created, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:
+  actions: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  reaction-comments-check:
+    runs-on: ubuntu-latest
+    name: Reaction Comments Check
+    steps:
+      - name: Run comments check
+        uses: dessant/reaction-comments@v4
+        with:
+          issue-comment: ''
+          pr-comment: ''
