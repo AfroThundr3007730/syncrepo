@@ -1,6 +1,8 @@
 syncrepo
 ========
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/0eeda1228af140359e2ca903aae328b8)](https://app.codacy.com/gh/AfroThundr3007730/syncrepo?utm_source=github.com&utm_medium=referral&utm_content=AfroThundr3007730/syncrepo&utm_campaign=Badge_Grade)
+
 An all-in-one software repository sync script (or at least it aims to be)
 
 Below are configuration files for creating upstream and downstream yum and apt repositories.
