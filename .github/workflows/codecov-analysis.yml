@@ -1,0 +1,25 @@
+name: Codecov Coverage Workflow
+
+on:
+  push:
+    branches: [ "master", "dev" ]
+  pull_request:
+    branches: [ "master", "dev" ]
+
+permissions:
+  contents: read
+
+jobs:
+  codecov-coverage-scan:
+    runs-on: ubuntu-latest
+    name: Codecov Coverage Scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@main
+        with:
+          flags: smart-tests
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
