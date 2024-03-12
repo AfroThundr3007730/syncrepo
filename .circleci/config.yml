@@ -1,0 +1,21 @@
+version: 2.1
+
+orbs:
+  shellcheck: circleci/shellcheck@3.1.2
+
+jobs:
+  run-shellcheck:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    steps:
+      - checkout
+      - shellcheck/install
+      - run:
+          command: bash -c 'shopt -s globstar nullglob; shellcheck **/*.sh && echo All clean'
+          name: Run Shellcheck command
+
+workflows:
+  main-workflow:
+    jobs:
+      - run-shellcheck
