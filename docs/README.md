@@ -1,4 +1,4 @@
-# ![logo](docs/icons8-sync.svg) Syncrepo
+# ![logo](icons8-sync.svg) Syncrepo
 
 ![GitHub Tag][repo_1]
 ![GitHub Repo stars][repo_2]
@@ -30,20 +30,20 @@ needed. Note that not all required setup steps are listed here.
 
 > TODO: Add a proper setup guide.
 
-Filename               | Description
----                    | ---
-`syncrepo.sh`          | New all-in-one repository sync script
-`syncrepo.service`     | Systemd service unit for syncrepo script
-`syncrepo.timer`       | Systemd timer unit for syncrepo script
-`syncrepo-vhost.conf`  | Apache vhost config for repository
-`syncrepo-log.conf`    | Logrotate config file
-`rsyncd.conf`          | Rsync config for repository
-`rsyncd.service`       | Systemd service unit for rsyncd service
-`centos-local.repo`    | Centos package config for clients
-`debian-sources.list`  | Debian package sources for clients
-`ubuntu-sources.list`  | Ubuntu package sources for clients
-`debmirror/*`          | The [`debmirror`][debmirror] tool submodule
-`clamavmirror/*`       | The [`clamavmirror`][clamavmirror] tool submodule
+Filename                    | Description
+---                         | ---
+`src/syncrepo.sh`           | New all-in-one repository sync script
+`src/syncrepo.service`      | Systemd service unit for syncrepo script
+`src/syncrepo.timer`        | Systemd timer unit for syncrepo script
+`src/syncrepo-vhost.conf`   | Apache vhost config for repository
+`src/syncrepo-log.conf`     | Logrotate config file
+`src/rsyncd.conf`           | Rsync config for repository
+`src/rsyncd.service`        | Systemd service unit for rsyncd service
+`src/centos-local.repo`     | Centos package config for clients
+`src/debian-sources.list`   | Debian package sources for clients
+`src/ubuntu-sources.list`   | Ubuntu package sources for clients
+`modules/debmirror/`        | The [`debmirror`][debmirror] tool submodule
+`modules/clamavmirror/`     | The [`clamavmirror`][clamavmirror] tool submodule
 
 > **Note:** The `dev` branch is where the latest changes happen.
 > It's not guaranteed to be completely functional all the time.
@@ -70,7 +70,7 @@ For reporting security issues, see the [security document](SECURITY.md).
 
 ## License
 
-This project is released under the [GNU GPL-3.0 License](LICENSE.md).
+This project is released under the [GNU GPL-3.0 License](/LICENSE.md).
 
 ## Versioning
 
