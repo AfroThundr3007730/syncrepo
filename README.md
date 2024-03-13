@@ -1,4 +1,4 @@
-# syncrepo
+# ![logo](docs/icons8-sync.svg) Syncrepo
 
 ![GitHub Tag][repo_1]
 ![GitHub Repo stars][repo_2]
