@@ -1,4 +1,4 @@
-# ![logo](icons8-sync.svg) Syncrepo
+# ![logo](sync-logo.svg) Syncrepo
 
 ![GitHub Tag][repo_1]
 ![GitHub Repo stars][repo_2]
@@ -32,6 +32,7 @@ needed. Note that not all required setup steps are listed here.
 
 Filename                    | Description
 ---                         | ---
+`docs/`                     | Documentation and other metadata
 `src/syncrepo.sh`           | New all-in-one repository sync script
 `src/syncrepo.service`      | Systemd service unit for syncrepo script
 `src/syncrepo.timer`        | Systemd timer unit for syncrepo script
@@ -90,7 +91,7 @@ This project follows [Semantic Versioning 2.0.0][symver_2].
 
 [symver_1]: https://img.shields.io/badge/semver-2.0.0-green?logo=semver
 [symver_2]: https://semver.org/spec/v2.0.0.html
-[license_1]: https://img.shields.io/badge/license-GPL%20v3-orange.svg?style=flat&logo=gnu
+[license_1]: https://img.shields.io/badge/license-GPL%20v3-green.svg?style=flat&logo=gnu
 [license_2]: http://www.gnu.org/licenses/gpl-3.0.en.html
 [fossa_1]: https://app.fossa.com/api/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo.svg?type=shield
 [fossa_2]: https://app.fossa.com/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo?ref=badge_shield
