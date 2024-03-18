@@ -1,7 +1,5 @@
-syncrepo
-========
+# syncrepo
 
-[![FOSSA Status][fossa_1]][fossa_3]
 ![GitHub Tag][repo_1]
 ![GitHub Repo stars][repo_2]
 ![GitHub forks][repo_3]
@@ -40,10 +38,13 @@ Filename               | Description                                 | Notes
 > **Note:** The `dev` branch is where the latest changes happen.
 > It's not guaranteed to be completely functional all the time.
 
-License
--------
+## Contributing
 
-[![FOSSA Status][fossa_2]][fossa_4]
+Contributions are welcome! Check out the [Contribution Guide](CONTRIBUTING.md).
+
+## License
+
+The code in this project is released under the [GPL-3.0 License](LICENSE).
 
 [repo_1]: https://img.shields.io/github/v/tag/AfroThundr3007730/syncrepo?style=flat&logo=github
 [repo_2]: https://img.shields.io/github/stars/AfroThundr3007730/syncrepo?style=flat&logo=github
@@ -55,9 +56,7 @@ License
 [discord_2]: https://discord.gg/zue9DcemEKZ
 
 [fossa_1]: https://app.fossa.com/api/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo.svg?type=shield
-[fossa_2]: https://app.fossa.com/api/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo.svg?type=large
-[fossa_3]: https://app.fossa.com/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo?ref=badge_shield
-[fossa_4]: https://app.fossa.com/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo?ref=badge_large
+[fossa_2]: https://app.fossa.com/projects/git%2Bgithub.com%2FAfroThundr3007730%2Fsyncrepo?ref=badge_shield
 [codacy_1]: https://api.codacy.com/project/badge/Grade/0eeda1228af140359e2ca903aae328b8
 [codacy_2]: https://app.codacy.com/gh/AfroThundr3007730/syncrepo
 [codecov_1]: https://codecov.io/gh/AfroThundr3007730/syncrepo/graph/badge.svg?token=5tKkLwN9Hm
