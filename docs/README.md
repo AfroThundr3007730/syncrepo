@@ -1,12 +1,14 @@
 # ![logo](sync-logo.svg) Syncrepo
 
+An all-in-one software repository sync script (or at least it aims to be)
+
 ![GitHub Tag][repo_1]
 ![GitHub Repo stars][repo_2]
 ![GitHub forks][repo_3]
 ![GitHub watchers][repo_4]
 [![Mirrored on Codeberg][codeberg_1]][codeberg_2]
 [![Chat on Gitter][gitter_1]][gitter_2]
-[![Contributor Covenant][covenant]](CODE_OF_CONDUCT.md)
+[![Contributor Covenant][covenant_1]][covenant_2]
 
 [![Semantic Versioning][symver_1]][symver_2]
 [![GNU General Public License][license_1]][license_2]
@@ -18,7 +20,7 @@
 
 [![Open in GitHub Codespaces][codespace_1]][codespace_2]
 
-An all-in-one software repository sync script (or at least it aims to be)
+## Project Overview
 
 Below are configuration files for creating upstream and downstream yum and apt
 repositories. These can be hosted on a CentOS, Debian, or Ubuntu system and
@@ -29,6 +31,18 @@ repositories or ClamAV definitions, debmirror or clamavmirror will also be
 needed. Note that not all required setup steps are listed here.
 
 > TODO: Add a proper setup guide.
+
+## Working with this repository
+
+The `master` branch hosts stable releases, unless bugfixes are needed, then a
+release branch is forked to host changes.
+
+The `dev` branch is where the latest changes happen. It's not guaranteed to be
+completely functional all the time.
+
+Further details can be found in the contributor guidelines.
+
+### Repository Layout
 
 Filename                    | Description
 ---                         | ---
@@ -43,41 +57,42 @@ Filename                    | Description
 `src/centos-local.repo`     | Centos package config for clients
 `src/debian-sources.list`   | Debian package sources for clients
 `src/ubuntu-sources.list`   | Ubuntu package sources for clients
-`modules/debmirror/`        | The [`debmirror`][debmirror] tool submodule
-`modules/clamavmirror/`     | The [`clamavmirror`][clamavmirror] tool submodule
+`modules/debmirror/`        | The [debmirror] tool submodule
+`modules/clamavmirror/`     | The [clamavmirror] tool submodule
 
-> **Note:** The `dev` branch is where the latest changes happen.
-> It's not guaranteed to be completely functional all the time.
-
-## Contributing
+### Contributing
 
 Contributions are welcome! Check out the [contribution guide](CONTRIBUTING.md).
 
-## Code of Conduct
+### Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
-## Credits
+### Credits
 
 All project contributors are listed in the [authors document](AUTHORS.md).
 
-## Change log
+### Change log
 
 Changes can (ostensibly) be found in the [change log](CHANGES.md).
 
-## Security Issues
+### Security Issues
 
 For reporting security issues, see the [security document](SECURITY.md).
 
-## License
+### License
 
 This project is released under the [GNU GPL-3.0 License](/LICENSE.md).
 
-## Versioning
+### Versioning
 
 This project follows [Semantic Versioning 2.0.0][symver_2].
 
-&nbsp;
+### Acknowledgements
+
+This project uses resources from [these other projects](ACKNOWLEDGEMENTS.md).
+
+<!-- -->
 
 [repo_1]: https://img.shields.io/github/v/tag/AfroThundr3007730/syncrepo?style=flat&logo=github
 [repo_2]: https://img.shields.io/github/stars/AfroThundr3007730/syncrepo?style=flat&logo=github
@@ -87,7 +102,8 @@ This project follows [Semantic Versioning 2.0.0][symver_2].
 [codeberg_2]: https://codeberg.org/AfroThundr/syncrepo
 [gitter_1]: https://img.shields.io/badge/Chat-on_Gitter-blue?style=flat&logo=gitter
 [gitter_2]: https://matrix.to/#/#syncrepo:gitter.im
-[covenant]: https://img.shields.io/badge/Contributor%20Covenant-2.1-blue?style=flat&logo=contributor-covenant
+[covenant_1]: https://img.shields.io/badge/Contributor%20Covenant-2.1-blue?style=flat&logo=contributor-covenant
+[covenant_2]: https://www.contributor-covenant.org/version/2/1/code_of_conduct/
 
 [symver_1]: https://img.shields.io/badge/semver-2.0.0-green?logo=semver
 [symver_2]: https://semver.org/spec/v2.0.0.html
