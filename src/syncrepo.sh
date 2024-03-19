@@ -12,12 +12,12 @@ shopt -s extdebug
 
 # Parse command line options
 syncrepo.parse_arguments() {
-    SR_META_AUTHOR='AfroThundr'
-    SR_META_BASENAME="${0##*/}"
-    SR_META_MODIFIED='20240310'
-    SR_META_VERSION='1.8.0-rc10'
-    SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
-    SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
+    declare -grx SR_META_AUTHOR='AfroThundr'
+    declare -grx SR_META_BASENAME="${0##*/}"
+    declare -grx SR_META_MODIFIED='20240323'
+    declare -grx SR_META_VERSION='1.8.0-rc11'
+    declare -grx SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
+    declare -grx SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
 
     [[ $# -gt 0 ]] || {
         utils.say -h 'No arguments specified, use -h for help.'
@@ -63,23 +63,23 @@ syncrepo.parse_arguments() {
             utils.say -h '  --sync-ubuntu     Sync the Ubuntu repo.'
             exit 0
         elif [[ $1 == -c ]]; then
-            SR_META_CONFIG_MANUAL=$2
+            declare -grx SR_META_CONFIG_MANUAL=$2
             shift 2
         elif [[ $1 == -C ]]; then
-            SR_BOOL_SAVE_CONFIG=true
+            declare -grx SR_BOOL_SAVE_CONFIG=true
             shift
         elif [[ $1 == -f ]]; then
-            SR_BOOL_SAVE_CONFIG_FORCE=true
+            declare -grx SR_BOOL_SAVE_CONFIG_FORCE=true
             shift
         elif [[ $1 == -q ]]; then
-            QUIET=true
+            declare -grx QUIET=true
             shift
         elif [[ $1 == -v ]]; then
             # TODO: Implement verbose or remove this
-            : VERBOSE=true
+            declare -grx VERBOSE=true
             shift
         elif [[ $1 == -y ]]; then
-            SR_BOOL_CONFIRMED=true
+            declare -grx SR_BOOL_CONFIRMED=true
             shift
         else
             utils.say -h 'Invalid argument specified, use -h for help.'
@@ -91,107 +91,107 @@ syncrepo.parse_arguments() {
 }
 
 # Initialize global config variables
+# TODO: Write a helper function for setting inheritance instead of the below
 syncrepo.set_globals() {
     local var
     for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
     utils.call syncrepo.load_config
 
     # User can override with a config file or environment variables
-    [[ ${SR_BOOL_UPSTREAM:-} ]] ||
-        SR_BOOL_UPSTREAM=${SR_CFG_BOOL_UPSTREAM:-true}
-    [[ ${SR_SYNC_ALL_REPOS:-} ]] ||
-        SR_SYNC_ALL_REPOS=${SR_CFG_SYNC_ALL_REPOS:-false}
-    [[ ${SR_SYNC_CENTOS:-} ]] ||
-        SR_SYNC_CENTOS=${SR_CFG_SYNC_CENTOS:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_EPEL:-} ]] ||
-        SR_SYNC_EPEL=${SR_CFG_SYNC_EPEL:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_DEBIAN:-} ]] ||
-        SR_SYNC_DEBIAN=${SR_CFG_SYNC_DEBIAN:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_DEBIAN_SECURITY:-} ]] ||
-        SR_SYNC_DEBIAN_SECURITY=${SR_CFG_SYNC_DEBIAN_SECURITY:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_UBUNTU:-} ]] ||
-        SR_SYNC_UBUNTU=${SR_CFG_SYNC_UBUNTU:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_SECURITYONION:-} ]] ||
-        SR_SYNC_SECURITYONION=${SR_CFG_SYNC_SECURITYONION:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_DOCKER:-} ]] ||
-        SR_SYNC_DOCKER=${SR_CFG_SYNC_DOCKER:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_CLAMAV:-} ]] ||
-        SR_SYNC_CLAMAV=${SR_CFG_SYNC_CLAMAV:-$SR_SYNC_ALL_REPOS}
-    [[ ${SR_SYNC_LOCAL:-} ]] ||
-        SR_SYNC_LOCAL=${SR_CFG_SYNC_LOCAL:-$SR_SYNC_ALL_REPOS}
+    utils.set_variable \
+        SR CFG BOOL_UPSTREAM true
+    utils.set_variable \
+        SR CFG SYNC_ALL_REPOS false
+    utils.set_variable \
+        SR CFG SYNC_CENTOS "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_EPEL "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_DEBIAN "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_DEBIAN_SECURITY "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_UBUNTU "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_SECURITYONION "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_DOCKER "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_CLAMAV "$SR_SYNC_ALL_REPOS"
+    utils.set_variable \
+        SR CFG SYNC_LOCAL "$SR_SYNC_ALL_REPOS"
 
-    [[ ${SR_REPO_PRIMARY:-} ]] ||
-        SR_REPO_PRIMARY=${SR_CFG_REPO_PRIMARY:-/srv/repository}
-    [[ ${SR_REPO_CHOWN_UID:-} ]] ||
-        SR_REPO_CHOWN_UID=${SR_CFG_REPO_CHOWN_UID:-root}
-    [[ ${SR_REPO_CHOWN_GID:-} ]] ||
-        SR_REPO_CHOWN_GID=${SR_CFG_REPO_CHOWN_GID:-www-data}
-    [[ ${SR_FILE_LOCKFILE:-} ]] ||
-        SR_FILE_LOCKFILE=${SR_CFG_FILE_LOCKFILE:-/var/lock/subsys/syncrepo}
-    [[ ${SR_FILE_LOG_MAIN:-} ]] ||
-        SR_FILE_LOG_MAIN=${SR_CFG_FILE_LOG_MAIN:-/var/log/syncrepo.log}
-    [[ ${SR_FILE_LOG_PROGRESS:-} ]] ||
-        SR_FILE_LOG_PROGRESS=${SR_CFG_FILE_LOG_PROGRESS:-/var/log/syncrepo_progress.log}
+    utils.set_variable \
+        SR CFG REPO_PRIMARY '/srv/repository'
+    utils.set_variable \
+        SR CFG REPO_CHOWN_UID 'root'
+    utils.set_variable \
+        SR CFG REPO_CHOWN_GID 'www-data'
+    utils.set_variable \
+        SR CFG FILE_LOCKFILE '/run/lock/syncrepo'
+    utils.set_variable \
+        SR CFG FILE_LOG_MAIN '/var/log/syncrepo.log'
+    utils.set_variable \
+        SR CFG FILE_LOG_FULL '/var/log/syncrepo_progress.log'
 
-    [[ ${SR_MIRROR_PRIMARY:-} ]] ||
-        SR_MIRROR_PRIMARY=${SR_CFG_MIRROR_PRIMARY:-mirrors.mit.edu}
-    [[ ${SR_MIRROR_UPSTREAM:-} ]] ||
-        SR_MIRROR_UPSTREAM=${SR_CFG_MIRROR_UPSTREAM:-mirror-us.lab.local}
+    utils.set_variable \
+        SR CFG MIRROR_PRIMARY 'mirrors.mit.edu'
+    utils.set_variable \
+        SR CFG MIRROR_UPSTREAM 'mirror-us.lab.local'
 
-    [[ ${SR_ARCH_RHEL:-} ]] ||
-        SR_ARCH_RHEL=${SR_CFG_ARCH_RHEL:-x86_64}
-    [[ ${SR_REPO_CENTOS:-} ]] ||
-        SR_REPO_CENTOS=${SR_CFG_REPO_CENTOS:-${SR_REPO_PRIMARY}/centos}
-    [[ ${SR_MIRROR_CENTOS:-} ]] ||
-        SR_MIRROR_CENTOS=${SR_CFG_MIRROR_CENTOS:-${SR_MIRROR_PRIMARY}::-entos}
-    [[ ${SR_REPO_EPEL:-} ]] ||
-        SR_REPO_EPEL=${SR_CFG_REPO_EPEL:-${SR_REPO_PRIMARY}/fedora-epel}
-    [[ ${SR_MIRROR_EPEL:-} ]] ||
-        SR_MIRROR_EPEL=${SR_CFG_MIRROR_EPEL:-${SR_MIRROR_PRIMARY}::-edora-epel}
+    utils.set_variable \
+        SR CFG ARCH_RHEL 'x86_64'
+    utils.set_variable \
+        SR CFG REPO_CENTOS "$SR_REPO_PRIMARY/centos"
+    utils.set_variable \
+        SR CFG MIRROR_CENTOS "$SR_MIRROR_PRIMARY::centos"
+    utils.set_variable \
+        SR CFG REPO_EPEL "$SR_REPO_PRIMARY/fedora-epel"
+    utils.set_variable \
+        SR CFG MIRROR_EPEL "$SR_MIRROR_PRIMARY::fedora-epel"
 
-    [[ ${SR_ARCH_DEBIAN:-} ]] ||
-        SR_ARCH_DEBIAN=${SR_CFG_ARCH_DEBIAN:-amd64}
-    [[ ${SR_REPO_UBUNTU:-} ]] ||
-        SR_REPO_UBUNTU=${SR_CFG_REPO_UBUNTU:-${SR_REPO_PRIMARY}/ubuntu}
-    [[ ${SR_MIRROR_UBUNTU:-} ]] ||
-        SR_MIRROR_UBUNTU=${SR_CFG_MIRROR_UBUNTU:-${SR_MIRROR_PRIMARY}::-buntu}
-    [[ ${SR_REPO_DEBIAN:-} ]] ||
-        SR_REPO_DEBIAN=${SR_CFG_REPO_DEBIAN:-${SR_REPO_PRIMARY}/debian}
-    [[ ${SR_MIRROR_DEBIAN:-} ]] ||
-        SR_MIRROR_DEBIAN=${SR_CFG_MIRROR_DEBIAN:-${SR_MIRROR_PRIMARY}::-ebian}
+    utils.set_variable \
+        SR CFG ARCH_DEBIAN 'amd64'
+    utils.set_variable \
+        SR CFG REPO_UBUNTU "$SR_REPO_PRIMARY/ubuntu"
+    utils.set_variable \
+        SR CFG MIRROR_UBUNTU "$SR_MIRROR_PRIMARY::ubuntu"
+    utils.set_variable \
+        SR CFG REPO_DEBIAN "$SR_REPO_PRIMARY/debian"
+    utils.set_variable \
+        SR CFG MIRROR_DEBIAN "$SR_MIRROR_PRIMARY::debian"
 
-    [[ ${SR_MIRROR_DEBIAN_SECURITY:-} ]] ||
-        SR_MIRROR_DEBIAN_SECURITY=${SR_CFG_MIRROR_DEBIAN_SECURITY:-security.debian.org}
-    [[ ${SR_REPO_DEBIAN_SECURITY:-} ]] ||
-        SR_REPO_DEBIAN_SECURITY=${SR_CFG_REPO_DEBIAN_SECURITY:-${SR_REPO_PRIMARY}/debian-security}
+    utils.set_variable \
+        SR CFG MIRROR_DEBIAN_SECURITY 'security.debian.org'
+    utils.set_variable \
+        SR CFG REPO_DEBIAN_SECURITY "$SR_REPO_PRIMARY/debian-security"
 
-    [[ ${SR_MIRROR_SECURITYONION:-} ]] ||
-        SR_MIRROR_SECURITYONION=${SR_CFG_MIRROR_SECURITYONION:-ppa.launchpad.net}
-    [[ ${SR_REPO_SECURITYONION:-} ]] ||
-        SR_REPO_SECURITYONION=${SR_CFG_REPO_SECURITYONION:-${SR_REPO_PRIMARY}/securityonion}
+    utils.set_variable \
+        SR CFG MIRROR_SECURITYONION 'ppa.launchpad.net'
+    utils.set_variable \
+        SR CFG REPO_SECURITYONION "$SR_REPO_PRIMARY/securityonion"
 
-    [[ ${SR_MIRROR_DOCKER:-} ]] ||
-        SR_MIRROR_DOCKER=${SR_CFG_MIRROR_DOCKER:-download.docker.com}
-    [[ ${SR_REPO_DOCKER:-} ]] ||
-        SR_REPO_DOCKER=${SR_CFG_REPO_DOCKER:-${SR_REPO_PRIMARY}/docker}
+    utils.set_variable \
+        SR CFG MIRROR_DOCKER 'download.docker.com'
+    utils.set_variable \
+        SR CFG REPO_DOCKER "$SR_REPO_PRIMARY/docker"
 
-    [[ ${SR_MIRROR_CLAMAV:-} ]] ||
-        SR_MIRROR_CLAMAV=${SR_CFG_MIRROR_CLAMAV:-database.clamav.net}
-    [[ ${SR_REPO_CLAMAV:-} ]] ||
-        SR_REPO_CLAMAV=${SR_CFG_REPO_CLAMAV:-${SR_REPO_PRIMARY}/clamav}
+    utils.set_variable \
+        SR CFG MIRROR_CLAMAV 'database.clamav.net'
+    utils.set_variable \
+        SR CFG REPO_CLAMAV "$SR_REPO_PRIMARY/clamav"
 
-    [[ ${SR_OPTS_RSYNC[*]:-} ]] || {
-        [[ ${SR_CFG_OPTS_RSYNC[*]:-} ]] && SR_OPTS_RSYNC=("${SR_CFG_OPTS_RSYNC[@]}") ||
-            SR_OPTS_RSYNC=(--hlmprtzDHS --stats --no-motd --del --delete-excluded --log-file="$SR_FILE_LOG_PROGRESS")
-    }
-    [[ ${SR_OPTS_TEE[*]:-} ]] || {
-        [[ ${SR_CFG_OPTS_TEE[*]:-} ]] && SR_OPTS_TEE=("${SR_CFG_OPTS_TEE[@]}") ||
-            SR_OPTS_TEE=(tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS")
-    }
+    utils.set_array_variable \
+        SR CFG OPTS_RSYNC \
+        --hlmprtzDHS --stats --no-motd --del --delete-excluded \
+        --log-file="$SR_FILE_LOG_FULL"
+    utils.set_array_variable \
+        SR CFG OPTS_TEE \
+        tee -a "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_FULL"
 
     for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
     utils.call syncrepo.save_config
-    utils.say init "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_PROGRESS" "${SR_OPTS_TEE[@]}"
+    utils.say init "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_FULL" "${SR_OPTS_TEE[@]}"
     return 0
 }
 
@@ -202,7 +202,9 @@ syncrepo.load_config() {
     for file in "${files[@]}"; do
         [[ -s $file ]] && {
             utils.say -h 'Reading configuration from: %s' "$file"
-            source <(awk '/^SR_CFG_/ && !/^SR_CFG_(BOOL|META)_/ {print $0}' "$file")
+            source <(awk '
+                /^SR_CFG_/ && !/^SR_CFG_(BOOL|META)_/ {print $0}
+            ' "$file")
         }
     done
     return 0
@@ -217,9 +219,43 @@ syncrepo.save_config() {
             exit 1
         }
         utils.say -h 'Writing configuration to: %s' "$file"
-        set | awk '/^SR_/ && !/^SR_(BOOL|META)_/ {gsub(/^SR_/,"SR_CFG_"); print $0}' >"$file"
+        set | awk '
+            /^SR_/ && !/^SR_(BOOL|META)_/ {gsub(/^SR_/,"SR_CFG_"); print $0}
+        ' >"$file"
         exit 0
     }
+    return 0
+}
+
+# Set variable based on precedence hierarchy
+utils.set_variable() {
+    [[ $# -eq 4 ]] || return 1
+    local var_name=$1_$3 var_cfg=$1_$2_$3 var_def=$4
+    if [[ ${!var_name:-} ]]; then
+        declare -grx "$var_name"
+    elif [[ ${!var_cfg:-} ]]; then
+        declare -grx "$var_name=${!var_cfg}"
+    else
+        declare -grx "$var_name=$var_def"
+    fi
+    return 0
+}
+
+# Set array variable based on precedence hierarchy
+utils.set_array_variable() {
+    [[ $# -ge 4 ]] || return 1
+    local item var_name=$1_$3 var_cfg=$1_$2_$3 var_def=("${@:4}")
+    if [[ ${!var_name:-} ]]; then
+        declare -agrx "$var_name" && return 0
+    elif [[ ${!var_cfg:-} ]]; then
+        declare -n var_tmp=$var_cfg
+    else
+        declare -n var_tmp=var_def
+    fi
+    for item in "${!var_tmp[@]}"; do
+        declare -ag "${var_name}[$item]=${var_tmp[$item]}"
+    done
+    declare -agrx "$var_name"
     return 0
 }
 
@@ -237,45 +273,48 @@ utils.call() {
 # shellcheck disable=SC2059
 utils.say() {
     [[ $# -gt 0 ]] || return 1
-    [[ $1 != init && ! ${say_file_log:-} ]] && utils.say init
+    [[ $1 != init && ! ${say_log_main:-} ]] && utils.say init
     if [[ $1 == init ]]; then
         export TERM=${TERM:-xterm}
-        say_file_log=${2:-/dev/null}
-        say_file_prog=${3:-/dev/null}
+        say_log_main=${2:-/dev/null}
+        say_log_verb=${3:-/dev/null}
         [[ $# -eq 1 ]] && say_tee=(:) && return 0
         shift 3 && say_tee=("$@")
     elif [[ $1 == -h ]]; then
-        local say_format=$2 && shift 2
+        local format=$2 && shift 2
         tput setaf 2
-        printf "$say_format\\n" "$@"
+        printf "$format\\n" "$@"
     elif [[ $1 == -d ]]; then
         [[ ${DEBUG:-} ]] || return 0
-        local say_format=$2 && shift 2
+        local format=$2 && shift 2
         tput setaf 6
-        printf "$say_format\\n" "$@"
+        printf "$format\\n" "$@"
     else
-        if [[ $say_file_log == no || $1 == -n ]]; then
+        if [[ $say_log_main == no || $1 == -n ]]; then
             [[ $1 == -n ]] && shift
         else
-            local say_log=true
+            local log=true
         fi
-        [[ $1 == -t ]] && : >"$say_file_prog" && shift
+        [[ $1 == -t ]] && : >"$say_log_verb" && shift
         if [[ $1 == info || $1 == warn || $1 == err ]]; then
             [[ $1 == info ]] && tput setaf 4
             [[ $1 == warn ]] && tput setaf 3
             [[ $1 == err ]] && tput setaf 1
-            local say_format="${1^^}: $2" && shift 2
+            local format="${1^^}: $2" && shift 2
         else
-            local say_format="$1" && shift
+            local format="$1" && shift
         fi
-        if [[ ${say_log:-} == true ]]; then
+        if [[ ${log:-} == true ]]; then
             if [[ ${QUIET:-} == true ]]; then
-                printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@" | "${say_tee[@]}" >/dev/null
+                printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
+                    "${say_tee[@]}" >/dev/null
             else
-                printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@" | "${say_tee[@]}"
+                printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
+                    "${say_tee[@]}"
             fi
         else
-            [[ ${QUIET:-} == true ]] || printf "%s: $say_format\\n" "$(date -u +%FT%TZ)" "$@"
+            [[ ${QUIET:-} == true ]] ||
+                printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@"
         fi
     fi
     # TODO: Test the tput combinations on multiple distros
@@ -286,26 +325,27 @@ utils.say() {
 # Record time duration, concurrent timers
 utils.timer() {
     [[ $# -gt 0 ]] || return 1
-    local timer_index=0
+    local index=0
     [[ $1 =~ ^[0-9]+$ ]] && {
         [[ ${timer_bookmark:=0} -ge $1 ]] || timer_bookmark=$1
-        timer_index=$1 && shift
+        index=$1 && shift
     }
     [[ $1 == -n ]] && ((timer_bookmark++))
     [[ $1 == -p ]] && ((timer_bookmark--))
-    [[ $1 == -c ]] && timer_index=${timer_bookmark:=0}
+    [[ $1 == -c ]] && index=${timer_bookmark:=0}
     shift
     [[ $# -gt 0 ]] || utils.say -n err 'No timer action specified.'
-    [[ $1 == start ]] && timer_starttimes[timer_index]=$SECONDS
+    [[ $1 == start ]] && timer_start[index]=$SECONDS
     [[ $1 == stop ]] && {
-        [[ ${timer_starttimes[timer_index]:-} ]] || utils.say -n err 'Timer %s not started.' "$timer_index"
-        timer_stoptimes[timer_index]=$SECONDS
-        timer_durations[timer_index]=$((timer_stoptimes[timer_index] - timer_starttimes[timer_index]))
+        [[ ${timer_start[index]:-} ]] ||
+            utils.say -n err 'Timer %s not started.' "$index"
+        timer_start[index]=$SECONDS
+        timer_total[index]=$((timer_start[index] - timer_start[index]))
     }
     [[ $1 == show ]] && {
-        [[ ${timer_stoptimes[timer_index]:-} ]] ||
-            timer_durations[timer_index]=$((SECONDS - timer_starttimes[timer_index]))
-        utils.say -h "${timer_durations[timer_index]}"
+        [[ ${timer_start[index]:-} ]] ||
+            timer_total[index]=$((SECONDS - timer_start[index]))
+        utils.say -h "${timer_total[index]}"
     }
     return 0
 }
@@ -315,23 +355,31 @@ utils.timer() {
 utils.wget_rsync() {
     [[ $# -gt 0 ]] || return 1
     local delete delta_add delta_remove local_dir local_files
-    local number_dirs remote_dir remote_files wget_mirror wget_spider
+    local dir_count remote_dir remote_files wget_mirror wget_spider
     [[ $1 == -d ]] && delete=true && shift
     [[ $# -ge 2 ]] || utils.say -n err 'Must supply remote and local directory.'
     remote_dir=$1
     local_dir=$2
     # WIP: This can be done with one awk regex
     [[ ${remote_dir##*/} ]] && # Does it have trailing slash?
-        number_dirs=$(printf '%s\n' "${remote_dir#*://*/}" | awk -F'/' '{print NF-1}') ||
-        number_dirs=$(printf '%s\n' "${remote_dir#*://*/}" | awk -F'/' '{print NF}')
+        dir_count=$(printf '%s\n' "${remote_dir#*://*/}" |
+            awk -F'/' '{print NF-1}') ||
+        dir_count=$(printf '%s\n' "${remote_dir#*://*/}" |
+            awk -F'/' '{print NF}')
     # Spiders remote to collect file list
-    wget_spider=(wget --spider -np -nH -r --cut-dirs="$number_dirs" -r index.html -P "$local_dir" "$remote_dir")
+    wget_spider=(
+        wget --spider -np -nH -r --cut-dirs="$dir_count"
+        -r index.html -P "$local_dir" "$remote_dir"
+    )
     # Mirrors files on remote list if not local
-    wget_mirror=(wget -c -N -np -nH -r --cut-dirs="$number_dirs" -r index.html -P "$local_dir" "$remote_dir")
+    wget_mirror=(
+        wget -c -N -np -nH -r --cut-dirs="$dir_count"
+        -r index.html -P "$local_dir" "$remote_dir"
+    )
 
-    # Strip host, and $number_dirs directories
+    # Strip host, and $dir_count directories
     mapfile -t remote_files <<<"$(
-        "${wget_spider[@]}" 2>&1 | awk -v ndirs="$number_dirs" \
+        "${wget_spider[@]}" 2>&1 | awk -v ndirs="$dir_count" \
             '/^--/ && /[^/]$/ {
             match($0,/^.*:\/\/[^/]*\/(.*)$/,a);
             print substr($0,) # Trim $remote_dir
@@ -345,8 +393,12 @@ utils.wget_rsync() {
 
     # Compare remote list with local list
     # WIP: Figure out the diff/comp options to return only left or right side differences
-    mapfile -t delta_add <<<"$(diff <("${remote_files[@]}") <("${local_files[@]}"))"
-    mapfile -t delta_remove <<<"$(diff <("${remote_files[@]}") <("${local_files[@]}"))"
+    mapfile -t delta_add <<<"$(
+        diff <("${remote_files[@]}") <("${local_files[@]}")
+    )"
+    mapfile -t delta_remove <<<"$(
+        diff <("${remote_files[@]}") <("${local_files[@]}")
+    )"
 
     # Sync down the deltas (need to investigate size differences?)
     # NOTE: Maybe use here document to avoid command length limit)
@@ -363,7 +415,10 @@ utils.wget_rsync() {
 syncrepo.build_vars() {
     IFS=,
     # Declare more variables (CentOS/EPEL)
-    [[ $SR_SYNC_CENTOS == true || $SR_SYNC_EPEL == true || $SR_SYNC_DOCKER == true ]] && {
+    [[ $SR_SYNC_CENTOS == true ||
+        $SR_SYNC_EPEL == true ||
+        $SR_SYNC_DOCKER == true ]] && {
+
         mapfile -t rhel_all_releases <<<"$(
             rsync "$SR_MIRROR_CENTOS" |
                 awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}'
@@ -377,38 +432,77 @@ syncrepo.build_vars() {
         rhel_previous_release=${rhel_previous_releases[-1]}
         rhel_previous_release_last=${rhel_previous_releases[-2]}
 
+        # Rewrite for 8+ only
+        # TODO: Also include keys in metadata/ and add boot/minimal ISOs
+        # TODO: Add boot/minimal isos for the other distros too
+        # TODO: (All distros) make sure GPG keys are synced too
+        #   https://dl.rockylinux.org/pub/rocky/9/metadata/
+        #   https://dl.rockylinux.org/pub/rocky/9/isos/x86_64/
+        # TODO: Adjust sync logic with new readme path
+        # TODO: Adjust mirror list for Rocky to replace CentOS
+        # TODO: Make the readme and the distro name variables (ISO too)
         rhel_filter_rsync=(
-            --include={os,BaseOS,AppStream,extras,updates,centosplus,fasttrack,readme}
-            --include={os/$SR_ARCH_RHEL,{BaseOS,AppStream}/$SR_ARCH_RHEL/os}/{repodata,Packages}
-            --exclude={aarch64,i386,ppc64le,{os/$SR_ARCH_RHEL,{BaseOS,AppStream}/$SR_ARCH_RHEL{,/os}}/*,/*}
+            --include={AppStream,BaseOS,CRB,extras,plus}/"$SR_ARCH_RHEL"/os/{repodata,Packages}
+            --include=README.txt
+            # TODO: Move ISO downloading to a separate control flag
+            "isos/$SR_ARCH_RHEL/Rocky-$rhel_current_release-latest-$SR_ARCH_RHEL-{boot,minimal}.iso"
+            --exclude={AppStream,BaseOS,CRB,extras,plus}/"$SR_ARCH_RHEL"{/os,}/*
+            --exclude={AppStream,BaseOS,CRB,extras,plus}/* /*
         )
-        epel_filter_rsync=(--exclude={SRPMS,aarch64,i386,ppc64,ppc64le,s390x,$SR_ARCH_RHEL/debug})
+        # TODO: Investigate whether cascading exclude globs are needed
+        # TODO: Adjust EPEL sync paths since they changed too
+        epel_filter_rsync=(
+            --include=Everything/"$SR_ARCH_RHEL"/{repodata,Packages}
+            --exclude=Everything{/$SR_ARCH_RHEL,}/* /*
+        )
 
-        docker_sync_args=(wget -m -np -N -nH -r --cut-dirs=1 -R index.html -P "$SR_REPO_PRIMARY/docker/")
-        docker_sync_args+=("$SR_MIRROR_DOCKER/linux/centos/${rhel_current_release%%.*}/$SR_ARCH_RHEL/stable/")
+        docker_sync_args=(
+            wget -m -np -N -nH -r --cut-dirs=1 -R index.html -P "$SR_REPO_PRIMARY/docker/"
+            "$SR_MIRROR_DOCKER/linux/centos/${rhel_current_release%%.*}/$SR_ARCH_RHEL/stable/"
+        )
     }
 
     # Declare more variables (Debian/Ubuntu)
-    [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_SECURITYONION == true || $SR_SYNC_DOCKER == true ]] && {
+    [[ $SR_SYNC_UBUNTU == true ||
+        $SR_SYNC_SECURITYONION == true ||
+        $SR_SYNC_DOCKER == true ]] && {
+
         mapfile -t ubuntu_all_releases <<<"$(
             curl -sL "$SR_MIRROR_PRIMARY/ubuntu-releases/HEADER.html" |
-                awk -F '(' '/<li.+>/ && /LTS/ && match($2, /[[:alpha:]]+/, a) {print a[0]}'
+                awk -F '(' '
+                    /<li.+>/ && /LTS/ &&
+                    match($2, /[[:alpha:]]+/, a) {print a[0]}
+                '
         )"
         ubuntu_current_release=${ubuntu_all_releases[0],}
         ubuntu_previous_release=${ubuntu_all_releases[1],}
 
         ubuntu_components=(main restricted universe multiverse)
-        ubuntu_repos=({$ubuntu_previous_release,$ubuntu_current_release}{,-backports,-updates,-proposed,-security})
-        ubuntu_sync_args=(-s "${ubuntu_components[*]}" -d "${ubuntu_repos[*]}" -h "$SR_MIRROR_PRIMARY" -r /ubuntu)
+        ubuntu_repos=(
+            "$ubuntu_current_release"{,-backports,-updates,-proposed,-security}
+            "$ubuntu_previous_release"{,-backports,-updates,-proposed,-security}
+        )
+        ubuntu_sync_args=(
+            -s "${ubuntu_components[*]}" -d "${ubuntu_repos[*]}"
+            -h "$SR_MIRROR_PRIMARY" -r /ubuntu
+        )
 
-        securityonion_sync_args=(-s main -d "$ubuntu_previous_release,$ubuntu_current_release")
-        securityonion_sync_args+=(-h "$SR_MIRROR_SECURITYONION" --rsync-extra=none -r /securityonion/stable/ubuntu)
+        securityonion_sync_args=(
+            -s main -d "$ubuntu_previous_release,$ubuntu_current_release"
+            -h "$SR_MIRROR_SECURITYONION" --rsync-extra=none
+            -r /securityonion/stable/ubuntu
+        )
 
-        docker_sync_args_ubuntu=(-s stable -d "$ubuntu_previous_release,$ubuntu_current_release")
-        docker_sync_args_ubuntu+=(-h "$SR_MIRROR_DOCKER" --rsync-extra=none -r /linux/ubuntu)
+        docker_sync_args_ubuntu=(
+            -s stable -d "$ubuntu_previous_release,$ubuntu_current_release"
+            -h "$SR_MIRROR_DOCKER" --rsync-extra=none -r /linux/ubuntu
+        )
     }
 
-    [[ $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBIAN_SECURITY == true || $SR_SYNC_DOCKER == true ]] && {
+    [[ $SR_SYNC_DEBIAN == true ||
+        $SR_SYNC_DEBIAN_SECURITY == true ||
+        $SR_SYNC_DOCKER == true ]] && {
+
         mapfile -t debian_all_releases <<<"$(
             curl -sL "$SR_MIRROR_PRIMARY/debian/README.html" |
                 awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
@@ -417,31 +511,56 @@ syncrepo.build_vars() {
         debian_previous_release=${debian_all_releases[1]}
 
         debian_components=(main contrib non-free)
-        debian_repos=({$debian_previous_release,$debian_current_release}{,-backports,-updates,-proposed-updates})
-        debian_sync_args=(-s "${debian_components[*]}" -d "${debian_repos[*]}" -h "$SR_MIRROR_PRIMARY" -r /debian)
+        debian_repos=(
+            "$debian_current_release"{,-backports,-updates,-proposed-updates}
+            "$debian_previous_release"{,-backports,-updates,-proposed-updates}
+        )
+        debian_sync_args=(
+            -s "${debian_components[*]}" -d "${debian_repos[*]}"
+            -h "$SR_MIRROR_PRIMARY" -r /debian
+        )
 
-        debian_repos_security=({$debian_current_release,$debian_previous_release}/updates)
-        debian_sync_args_security=(-s "${debian_components[*]}" -d "${debian_repos_security[*]}")
-        debian_sync_args_security+=(-h "$SR_MIRROR_DEBIAN_SECURITY" -r /)
-
-        docker_sync_args_debian=(-s stable -d "$debian_previous_release,$debian_current_release")
-        docker_sync_args_debian+=(-h "$SR_MIRROR_DOCKER" --rsync-extra=none -r /linux/debian)
+        debian_repos_security=(
+            {$debian_current_release,$debian_previous_release}/updates
+        )
+        debian_sync_args_security=(
+            -s "${debian_components[*]}" -d "${debian_repos_security[*]}"
+            -h "$SR_MIRROR_DEBIAN_SECURITY" -r /
+        )
+        docker_sync_args_debian=(
+            -s stable -d "$debian_previous_release,$debian_current_release"
+            -h "$SR_MIRROR_DOCKER" --rsync-extra=none -r /linux/debian
+        )
     }
 
-    [[ $SR_SYNC_UBUNTU == true || $SR_SYNC_DEBIAN == true || $SR_SYNC_DEBIAN_SECURITY == true ||
-        $SR_SYNC_SECURITYONION == true || $SR_SYNC_DOCKER == true ]] && {
-        tool_args_debmirror1=(debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors)
-        tool_args_debmirror1+=(--method=rsync --retry-rsync-packages=5 -p "--rsync-options='${SR_OPTS_RSYNC[*]}'")
-        tool_args_debmirror2=(debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors)
-        tool_args_debmirror2+=(--method=http --checksums -p)
-        tool_args_debmirror3=(debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors)
-        tool_args_debmirror3+=(--method=https --checksums -p)
+    [[ $SR_SYNC_UBUNTU == true ||
+        $SR_SYNC_DEBIAN == true ||
+        $SR_SYNC_DEBIAN_SECURITY == true ||
+        $SR_SYNC_SECURITYONION == true ||
+        $SR_SYNC_DOCKER == true ]] && {
+
+        # shellcheck disable=SC2034
+        tool_args_debmirror1=(
+            debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors
+            --method=rsync --retry-rsync-packages=5 -p
+            "--rsync-options='${SR_OPTS_RSYNC[*]}'"
+        )
+        tool_args_debmirror2=(
+            debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors
+            --method=http --checksums -p
+        )
+        tool_args_debmirror3=(
+            debmirror -a "$SR_ARCH_DEBIAN" --no-source --ignore-small-errors
+            --method=https --checksums -p
+        )
     }
 
     # And a few more (ClamAV)
     [[ $SR_SYNC_CLAMAV == true ]] && {
-        tool_args_clamavmirror=(clamavmirror -a "$SR_MIRROR_CLAMAV" -d "$SR_REPO_CLAMAV")
-        tool_args_clamavmirror+=(-u "$SR_REPO_CHOWN_UID" -g "$SR_REPO_CHOWN_GID")
+        tool_args_clamavmirror=(
+            clamavmirror -a "$SR_MIRROR_CLAMAV" -d "$SR_REPO_CLAMAV"
+            -u "$SR_REPO_CHOWN_UID" -g "$SR_REPO_CHOWN_GID"
+        )
     }
 
     IFS=' '
@@ -469,8 +588,11 @@ syncrepo.sanity_check() {
     }
 
     # Check that we can reach the public mirror
-    ([[ $SR_BOOL_UPSTREAM == true ]] && ! rsync "${SR_MIRROR_PRIMARY}::" &>/dev/null) ||
-        ([[ $SR_BOOL_UPSTREAM == false ]] && ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null) && {
+    ([[ $SR_BOOL_UPSTREAM == true ]] &&
+        ! rsync "${SR_MIRROR_PRIMARY}::" &>/dev/null) ||
+        ([[ $SR_BOOL_UPSTREAM == false ]] &&
+            ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null) && {
+
         utils.say err 'Cannot reach the %s mirror server.' "$SR_MIRROR_PRIMARY"
         exit 1
     }
@@ -550,7 +672,7 @@ syncrepo.sync_ubuntu() {
     utils.say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_UBUNTU"
     "${tool_args_debmirror2[@]}" "${ubuntu_sync_args[@]}" \
-        "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_PROGRESS"
+        "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_FULL"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -567,7 +689,7 @@ syncrepo.sync_debian() {
     utils.say 'Beginning sync of Debian %s and %s repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN"
     "${tool_args_debmirror2[@]}" "${debian_sync_args[@]}" \
-        "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_PROGRESS"
+        "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_FULL"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -584,7 +706,7 @@ syncrepo.sync_debian_security() {
     utils.say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN_SECURITY"
     "${tool_args_debmirror2[@]}" "${debian_sync_args_security[@]}" \
-        "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_PROGRESS"
+        "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_FULL"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -601,7 +723,7 @@ syncrepo.sync_securityonion() {
     utils.say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_SECURITYONION"
     "${tool_args_debmirror2[@]}" "${securityonion_sync_args[@]}" \
-        "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_PROGRESS"
+        "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_FULL"
     utils.say 'Done.\n'
 
     unset GNUPGHOME
@@ -620,7 +742,7 @@ syncrepo.sync_docker() {
     [[ $SR_SYNC_CENTOS == true ]] && {
         utils.say 'Beginning sync of Docker Centos %s repository from %s.' \
             "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
-        "${docker_sync_args[@]}" &>>"$SR_FILE_LOG_PROGRESS"
+        "${docker_sync_args[@]}" &>>"$SR_FILE_LOG_FULL"
         utils.say 'Done.\n'
     }
 
@@ -628,7 +750,7 @@ syncrepo.sync_docker() {
         utils.say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
             "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
         "${tool_args_debmirror3[@]}" "${docker_sync_args_ubuntu[@]}" \
-            "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_PROGRESS"
+            "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_FULL"
         utils.say 'Done.\n'
     }
 
@@ -636,7 +758,7 @@ syncrepo.sync_docker() {
         utils.say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
             "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DOCKER"
         "${tool_args_debmirror3[@]}" "${docker_sync_args_debian[@]}" \
-            "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_PROGRESS"
+            "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_FULL"
         utils.say 'Done.\n'
     }
 
@@ -651,7 +773,7 @@ syncrepo.sync_clamav() {
     # Sync clamav repository
     # TODO: Replace with wget_rsync()
     utils.say 'Beginning sync of ClamAV repository from %s.' "$SR_MIRROR_CLAMAV"
-    "${tool_args_clamavmirror[@]}" &>>"$SR_FILE_LOG_PROGRESS"
+    "${tool_args_clamavmirror[@]}" &>>"$SR_FILE_LOG_FULL"
     utils.say 'Done.\n'
 
     return 0
@@ -697,8 +819,10 @@ syncrepo.sync_downstream() {
         [[ -d $SR_REPO_PRIMARY/$repo ]] || mkdir -p "$SR_REPO_PRIMARY/$repo"
 
         # Sync the upstream repository
-        utils.say 'Beginning sync of %s repository from %s.' "$repo" "$SR_MIRROR_UPSTREAM"
-        rsync "${SR_OPTS_RSYNC[@]}" "${SR_MIRROR_UPSTREAM}::$repo/" "$SR_REPO_PRIMARY/$repo/"
+        utils.say 'Beginning sync of %s repository from %s.' \
+            "$repo" "$SR_MIRROR_UPSTREAM"
+        rsync "${SR_OPTS_RSYNC[@]}" "${SR_MIRROR_UPSTREAM}::$repo/" \
+            "$SR_REPO_PRIMARY/$repo/"
         utils.say 'Done.\n'
     done
 
@@ -716,12 +840,13 @@ syncrepo.main() {
     # If evrything is good, begin the sync
     utils.call syncrepo.sanity_check && {
         utils.say -t 'Progress log reset.'
-        utils.say 'Started synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
-        utils.say 'Use tail -f %s to view progress.' "$SR_FILE_LOG_PROGRESS"
+        utils.say 'Started synchronization of repositories: %s' \
+            "${SR_META_SOFTWARE[*]}"
+        utils.say 'Use tail -f %s to view progress.' "$SR_FILE_LOG_FULL"
         utils.timer start
 
         # There can be only one...
-        touch "$SR_FILE_LOCKFILE"
+        printf '%s\n' $$ >"$SR_FILE_LOCKFILE"
 
         # Are we upstream?
         if [[ $SR_BOOL_UPSTREAM == true ]]; then
@@ -765,9 +890,11 @@ syncrepo.main() {
 
         # Now we're done
         utils.timer stop
-        utils.say 'Completed synchronization of repositories: %s' "${SR_META_SOFTWARE[*]}"
+        utils.say 'Completed synchronization of repositories: %s' \
+            "${SR_META_SOFTWARE[*]}"
         utils.say 'Total duration: %d seconds. Current repository size: %s.\n' \
-            "$(utils.timer show)" "$(du -hs "$SR_REPO_PRIMARY" | awk '{print $1}')"
+            "$(utils.timer show)" \
+            "$(du -hs "$SR_REPO_PRIMARY" | awk '{print $1}')"
     }
 
     exit 0
