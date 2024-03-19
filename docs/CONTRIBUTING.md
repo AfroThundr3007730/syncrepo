@@ -1,14 +1,23 @@
 # How to Contribute
 
-Note that I am not a code guru, I make plenty of mistakes. So if
-you've found some - and would like to report them or submit a fix -
-feel free to do so by [opening an issue][1] or pull request.
-Feature additions or requests are also welcome here.
+Note that the author is not a codeing expert, and makes plenty of mistakes. If
+you've found one - and would like to report it or submit a fix - feel free to do
+so by opening an [issue] or pull request. Feature additions or requests are also
+welcome here.
 
-For bug reports, feature requests, and questions, open as an issue,
-and I will take a look.
+For bug reports and feature requests, open an issue and provide any relevant
+details there. Questions are not well suited to issue format, and may be better
+addressed by asking instead on [Gitter].
 
-For pull requests, features should be submitted to the `dev` branch,
-while a bug fix gets pushed to `master` or the relevant release branch.
+For pull requests, features and bug fixes should be submitted to the `dev`
+branch. Bug fixes will also get pushed to `master` or the relevant release
+branch when needed. Code submissions should be [lint] free, and follow best
+practices where possible.
 
-[1]: https://github.com/AfroThundr3007730/syncrepo/issues/new
+By making contributions to this project you agree to follow the conditions laid
+out in the [Developer Certificate of Origin][cert].
+
+[issue]: https://github.com/AfroThundr3007730/syncrepo/issues/new
+[gitter]: https://matrix.to/#/#syncrepo:gitter.im
+[lint]: https://github.com/koalaman/shellcheck
+[cert]: https://developercertificate.org/
