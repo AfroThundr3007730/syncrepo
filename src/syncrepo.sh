@@ -38,29 +38,29 @@ syncrepo.parse_arguments() {
             utils.say -h '    [-l <log_file>] [-p <progress_log>]'
             utils.say -h '    [-A|--sync-all] [<component_options>...]'
             utils.say -h '\nOptions:'
-            utils.say -h '  -a|--arch         Specify architecture to sync.'
-            utils.say -h '  -c|--config       Specify config file location.'
-            utils.say -h '  -C|--config-save  Saves default values to a config file.'
-            utils.say -h '  -d|--downstream   Set this mirror to be downstream.'
-            utils.say -h '  -f|--force-save   Overwrite config file when saving.'
-            utils.say -h '  -h|--help         Display this help message and exit.'
-            utils.say -h '  -l|--log-file     Specify log file location.'
-            utils.say -h '  -p|--progress     Specify progress log location.'
-            utils.say -h '  -m|--mirror       Specify upstream mirror.'
-            utils.say -h '  -q|--quiet        Suppress output to console.'
-            utils.say -h '  -v|--verbose      Verbose output to console.'
-            utils.say -h '  -V|--version      Show the version info and exit.'
-            utils.say -h '  -y|--yes          Confirm the repository sync.'
+            utils.say -h '  -a, --arch         Specify architecture to sync.'
+            utils.say -h '  -c, --config       Specify config file location.'
+            utils.say -h '  -C, --config-save  Saves default values to a config file.'
+            utils.say -h '  -d, --downstream   Set this mirror to be downstream.'
+            utils.say -h '  -f, --force-save   Overwrite config file when saving.'
+            utils.say -h '  -h, --help         Display this help message and exit.'
+            utils.say -h '  -l, --log-file     Specify log file location.'
+            utils.say -h '  -p, --progress     Specify progress log location.'
+            utils.say -h '  -m, --mirror       Specify upstream mirror.'
+            utils.say -h '  -q, --quiet        Suppress output to console.'
+            utils.say -h '  -v, --verbose      Verbose output to console.'
+            utils.say -h '  -V, --version      Show the version info and exit.'
+            utils.say -h '  -y, --yes          Confirm the repository sync.'
             utils.say -h '\nYou can explicitly enable components with the following:'
-            utils.say -h '  --sync-all        Sync all available components.'
-            utils.say -h '  --sync-centos     Sync the CentOS repo.'
-            utils.say -h '  --sync-clamav     Sync the ClamAV repo.'
-            utils.say -h '  --sync-debian     Sync the Debian repo.'
-            utils.say -h '  --sync-debsec     Sync the Debian Secuirty repo.'
-            utils.say -h '  --sync-epel       Sync the EPEL repo.'
-            utils.say -h '  --sync-local      Sync a locally built repo.'
-            utils.say -h '  --sync-sonion     Sync the Security Onion repo.'
-            utils.say -h '  --sync-ubuntu     Sync the Ubuntu repo.'
+            utils.say -h '  --sync-all         Sync all available components.'
+            utils.say -h '  --sync-centos      Sync the CentOS repo.'
+            utils.say -h '  --sync-clamav      Sync the ClamAV repo.'
+            utils.say -h '  --sync-debian      Sync the Debian repo.'
+            utils.say -h '  --sync-debsec      Sync the Debian Secuirty repo.'
+            utils.say -h '  --sync-epel        Sync the EPEL repo.'
+            utils.say -h '  --sync-local       Sync a locally built repo.'
+            utils.say -h '  --sync-sonion      Sync the Security Onion repo.'
+            utils.say -h '  --sync-ubuntu      Sync the Ubuntu repo.'
             exit 0
         elif [[ $1 == -c ]]; then
             declare -grx SR_META_CONFIG_MANUAL=$2
@@ -191,6 +191,7 @@ syncrepo.set_globals() {
 
     for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
     utils.call syncrepo.save_config
+    # TODO: Remove SR_OPTS_TEE if we're only using it here
     utils.say init "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_FULL" "${SR_OPTS_TEE[@]}"
     return 0
 }
@@ -269,56 +270,55 @@ utils.call() {
     utils.say -d '%-*s leave %s' $((--call_count)) '<-' "$name"
 }
 
-# Log message and print to stdout
+# Log message and print to console
 # shellcheck disable=SC2059
 utils.say() {
     [[ $# -gt 0 ]] || return 1
-    [[ $1 != init && ! ${say_log_main:-} ]] && utils.say init
-    if [[ $1 == init ]]; then
+    [[ $1 == -s || ${say_log_main:-} ]] ||
+        utils.say -s
+    if [[ $1 == -s ]]; then
         export TERM=${TERM:-xterm}
         say_log_main=${2:-/dev/null}
         say_log_verb=${3:-/dev/null}
-        [[ $# -eq 1 ]] && say_tee=(:) && return 0
-        shift 3 && say_tee=("$@")
-    elif [[ $1 == -h ]]; then
+        [[ $# -ge 4 ]] &&
+            say_tee=("${@:4}") ||
+            say_tee=(tee -a "$say_log_main" "$say_log_verb")
+    elif [[ $1 =~ -h|--help ]]; then
         local format=$2 && shift 2
         tput setaf 2
         printf "$format\\n" "$@"
-    elif [[ $1 == -d ]]; then
-        [[ ${DEBUG:-} ]] || return 0
-        local format=$2 && shift 2
-        tput setaf 6
-        printf "$format\\n" "$@"
     else
-        if [[ $say_log_main == no || $1 == -n ]]; then
-            [[ $1 == -n ]] && shift
-        else
-            local log=true
-        fi
+        local fd=1 log=true tag=''
+        local regex='^-((d|i|w|e)|-(debug|info|warn|error))$'
+        [[ ${QUIET:-} ]] && fd=/dev/null
+        [[ $1 == -n ]] && log=false && shift
+        [[ $1 == -T ]] && : >"$say_log_main" && shift
         [[ $1 == -t ]] && : >"$say_log_verb" && shift
-        if [[ $1 == info || $1 == warn || $1 == err ]]; then
-            [[ $1 == info ]] && tput setaf 4
-            [[ $1 == warn ]] && tput setaf 3
-            [[ $1 == err ]] && tput setaf 1
-            local format="${1^^}: $2" && shift 2
+        [[ $# -gt 0 ]] || return 0
+        if [[ $1 =~ $regex ]]; then
+            [[ $1 =~ -d|--debug ]] && {
+                [[ ${DEBUG:-} ]] || return 0
+                tag=DEBUG && tput setaf 6
+            }
+            [[ $1 =~ -i|--info ]] &&
+                tag=INFO && tput setaf 4
+            [[ $1 =~ -w|--warn ]] &&
+                tag=WARN && tput setaf 3 && fd=2
+            [[ $1 =~ -e|--error ]] &&
+                tag=ERROR && tput setaf 1 && fd=2
+            local format="$tag: $2" && shift 2
         else
             local format="$1" && shift
         fi
-        if [[ ${log:-} == true ]]; then
-            if [[ ${QUIET:-} == true ]]; then
-                printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
-                    "${say_tee[@]}" >/dev/null
-            else
-                printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
-                    "${say_tee[@]}"
-            fi
+        [[ ${SILENT:-} ]] && fd=/dev/null
+        if [[ $log == true && $say_log_main != /dev/null ]]; then
+            printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
+                "${say_tee[@]}" >&"$fd"
         else
-            [[ ${QUIET:-} == true ]] ||
-                printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@"
+            printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" >&"$fd"
         fi
     fi
-    # TODO: Test the tput combinations on multiple distros
-    tput setaf 7 # For CentOS
+    tput setaf 7
     return 0
 }
 
@@ -334,11 +334,11 @@ utils.timer() {
     [[ $1 == -p ]] && ((timer_bookmark--))
     [[ $1 == -c ]] && index=${timer_bookmark:=0}
     shift
-    [[ $# -gt 0 ]] || utils.say -n err 'No timer action specified.'
+    [[ $# -gt 0 ]] || utils.say -n -e 'No timer action specified.'
     [[ $1 == start ]] && timer_start[index]=$SECONDS
     [[ $1 == stop ]] && {
         [[ ${timer_start[index]:-} ]] ||
-            utils.say -n err 'Timer %s not started.' "$index"
+            utils.say -n -e 'Timer %s not started.' "$index"
         timer_start[index]=$SECONDS
         timer_total[index]=$((timer_start[index] - timer_start[index]))
     }
@@ -357,7 +357,7 @@ utils.wget_rsync() {
     local delete delta_add delta_remove local_dir local_files
     local dir_count remote_dir remote_files wget_mirror wget_spider
     [[ $1 == -d ]] && delete=true && shift
-    [[ $# -ge 2 ]] || utils.say -n err 'Must supply remote and local directory.'
+    [[ $# -ge 2 ]] || utils.say -n -e 'Must supply remote and local directory.'
     remote_dir=$1
     local_dir=$2
     # WIP: This can be done with one awk regex
@@ -576,14 +576,14 @@ syncrepo.build_vars() {
 syncrepo.sanity_check() {
     # Keep the user from starting the script by accident
     [[ $SR_BOOL_CONFIRMED == true ]] || {
-        utils.say err 'Confirm with -y to start the sync.'
+        utils.say -e 'Confirm with -y to start the sync.'
         exit 1
     }
 
     # Check if the rsync script is already running
     [[ -f $SR_FILE_LOCKFILE ]] && {
-        utils.say err 'Detected lockfile: %s' "$SR_FILE_LOCKFILE"
-        utils.say err 'Repository updates are already running.'
+        utils.say -e 'Detected lockfile: %s' "$SR_FILE_LOCKFILE"
+        utils.say -e 'Repository updates are already running.'
         exit 1
     }
 
@@ -593,13 +593,13 @@ syncrepo.sanity_check() {
         ([[ $SR_BOOL_UPSTREAM == false ]] &&
             ! rsync "${SR_MIRROR_UPSTREAM}::" &>/dev/null) && {
 
-        utils.say err 'Cannot reach the %s mirror server.' "$SR_MIRROR_PRIMARY"
+        utils.say -e 'Cannot reach the %s mirror server.' "$SR_MIRROR_PRIMARY"
         exit 1
     }
 
     # Check that the repository is mounted
     mount | grep "$SR_REPO_PRIMARY" &>/dev/null || {
-        utils.say err 'Directory %s is not mounted.' "$SR_REPO_PRIMARY"
+        utils.say -e 'Directory %s is not mounted.' "$SR_REPO_PRIMARY"
         exit 1
     }
 
@@ -784,7 +784,7 @@ syncrepo.sync_downstream() {
     utils.say 'Configured as downstream, so mirroring local upstream.'
 
     [[ $SR_MIRROR_UPSTREAM ]] || {
-        utils.say err 'SR_MIRROR_UPSTREAM is empty or not set.'
+        utils.say -e 'SR_MIRROR_UPSTREAM is empty or not set.'
         exit 1
     }
 
@@ -809,7 +809,7 @@ syncrepo.sync_downstream() {
         package_list+=(local)
 
     [[ ${package_list[*]:-} ]] || {
-        utils.say err 'No repos enabled for sync.'
+        utils.say -e 'No repos enabled for sync.'
         exit 1
     }
 
