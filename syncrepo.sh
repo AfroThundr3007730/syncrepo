@@ -10,8 +10,8 @@
 set_globals() {
     AUTHOR='AfroThundr'
     BASENAME="${0##*/}"
-    MODIFIED='20240228'
-    VERSION='1.7.0'
+    MODIFIED='20240329'
+    VERSION='1.7.1'
 
     SOFTWARE='CentOS, EPEL, Debian, Ubuntu, Security Onion, Docker, and ClamAV'
 
@@ -67,7 +67,9 @@ set_globals() {
 # Parse command line options
 argument_handler() {
     [[ -n $1 ]] || {
-        say -h 'No arguments specified, use -h for help.'; exit 10; }
+        say -h 'No arguments specified, use -h for help.'
+        exit 10
+    }
 
     while [[ -n $1 ]]; do
         if [[ $1 == -v ]]; then
@@ -84,19 +86,6 @@ argument_handler() {
             say -h '  -h  Display help text.'
             say -h '  -v  Emit version info.'
             say -h '  -y  Confirm repo sync.'
-            # Need to add options
-            # -l|--log-file
-            # -p|--prog-log
-            # -u|--upstream
-            # -s|--sync (array)
-            # --centos-sync
-            # --epel-sync
-            # --ubuntu-sync
-            # --debian-sync
-            # --debsec-sync
-            # --sonion-sync
-            # --clamav-sync
-            # --local-sync
             exit 0
         elif [[ $1 == -y ]]; then
             CONFIRM=true
@@ -109,7 +98,11 @@ argument_handler() {
 
     [[ $CONFIRM == true ]] || {
         [[ $ver == true ]] || {
-            say -h 'Confirm with -y to start the sync.'; exit 10; }; exit 0; }
+            say -h 'Confirm with -y to start the sync.'
+            exit 10
+        }
+        exit 0
+    }
 }
 
 # Log message and print to stdout
@@ -117,23 +110,26 @@ argument_handler() {
 say() {
     export TERM=${TERM:=xterm}
     if [[ $1 == -h ]]; then
-        shift; local s=$1; shift
-        tput setaf 2; printf "$s\\n" "$@"
+        local s=$2 && shift 2
+        tput setaf 2
+        printf "$s\\n" "$@"
     else
         if [[ $LOGFILE == no && $PROGFILE == no ]] || [[ $1 == -n ]]; then
             [[ $1 == -n ]] && shift
         else
             local log=true
         fi
-        [[ $1 == -t ]] && { echo > $PROGFILE; shift; }
+        [[ $1 == -t ]] && {
+            echo >$PROGFILE && shift
+        }
         if [[ $1 == info || $1 == warn || $1 == err ]]; then
             [[ $1 == info ]] && tput setaf 4
             [[ $1 == warn ]] && tput setaf 3
-            [[ $1 == err  ]] && tput setaf 1
-            local l=${1^^}; shift
-            local s="$l: $1"; shift
+            [[ $1 == err ]] && tput setaf 1
+            local l=${1^^} && shift
+            local s="$l: $1" && shift
         else
-            local s="$1"; shift
+            local s="$1" && shift
         fi
         if [[ $log == true ]]; then
             printf "%s: $s\\n" "$(date -u +%FT%TZ)" "$@" | $TEELOG
@@ -147,18 +143,23 @@ say() {
 # Record time duration, concurrent timers
 timer() {
     [[ $1 =~ ^[0-9]+$ ]] && {
-        [[ $n -gt $1 ]] || n=$1; local i=$1; shift; }
-    [[ $1 == -n ]] && { n=$(( n + 1 )); shift; }
-    [[ $1 == -p ]] && { n=$(( n - 1 )); shift; }
-    [[ $1 == -c ]] && { local i=$n; shift; }
+        [[ $n -gt $1 ]] || n=$1
+        local i=$1 && shift
+    }
+    [[ $1 == -n ]] && n=$((n + 1)) && shift
+    [[ $1 == -p ]] && n=$((n - 1)) && shift
+    [[ $1 == -c ]] && local i=$n && shift
     [[ -n $1 ]] || say -n err 'No timer action specified.'
-    [[ $1 == start ]] && tstart[$i]=$SECONDS
-    [[ $1 == stop  ]] && {
-        [[ -n ${tstart[$i]} ]] || say -n err 'Timer %s not started.' "$i"
-        tstop[$i]=$SECONDS; duration[$i]=$(( tstop[i] - tstart[i] )); }
+    [[ $1 == start ]] && tstart[i]=$SECONDS
+    [[ $1 == stop ]] && {
+        [[ -n ${tstart[i]} ]] || say -n err 'Timer %s not started.' "$i"
+        tstop[i]=$SECONDS
+        duration[i]=$((tstop[i] - tstart[i]))
+    }
     [[ $1 == show ]] && {
-        [[ -n ${tstop[$i]} ]] || duration[$i]=$(( SECONDS - tstart[i] ))
-        echo ${duration[$i]}; }
+        [[ -n ${tstop[i]} ]] || duration[i]=$((SECONDS - tstart[i]))
+        echo ${duration[i]}
+    }
     return 0
 }
 
@@ -166,12 +167,12 @@ timer() {
 build_vars() {
     # Declare more variables (CentOS/EPEL)
     [[ $CENTOS_SYNC == true || $EPEL_SYNC == true || $DOCKER_SYNC == true ]] && {
-        mapfile -t allrels <<< "$(
+        mapfile -t allrels <<<"$(
             rsync $CENTHOST |
-            awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
-            sort -V
+                awk '/^d/ && /[0-9]+\.[0-9.]+$/ {print $5}' |
+                sort -V
         )"
-        mapfile -t oldrels <<< "$(
+        mapfile -t oldrels <<<"$(
             for i in "${allrels[@]}"; do
                 [[ ${i%%.*} -eq $((${allrels[-1]%%.*} - 1)) ]] && echo "$i"
             done
@@ -194,9 +195,9 @@ build_vars() {
 
     # Declare more variables (Debian/Ubuntu)
     [[ $UBUNTU_SYNC == true || $SONION_SYNC == true || $DOCKER_SYNC == true ]] && {
-        mapfile -t uburels <<< "$(
+        mapfile -t uburels <<<"$(
             curl -sL $MIRROR/ubuntu-releases/HEADER.html |
-            awk -F '(' '/<li.+>/ && /LTS/ && match($2, /[[:alpha:]]+/, a) {print a[0]}'
+                awk -F '(' '/<li.+>/ && /LTS/ && match($2, /[[:alpha:]]+/, a) {print a[0]}'
         )"
         ubucur=${uburels[0],}
         ubupre=${uburels[1],}
@@ -214,9 +215,9 @@ build_vars() {
     }
 
     [[ $DEBIAN_SYNC == true || $DEBSEC_SYNC == true || $DOCKER_SYNC == true ]] && {
-        mapfile -t debrels <<< "$(
+        mapfile -t debrels <<<"$(
             curl -sL $MIRROR/debian/README.html |
-            awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
+                awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
         )"
         debcur=${debrels[0]}
         debpre=${debrels[1]}
@@ -235,7 +236,7 @@ build_vars() {
     }
 
     [[ $UBUNTU_SYNC == true || $DEBIAN_SYNC == true ||
-       $DEBSEC_SYNC == true || $SONION_SYNC == true || $DOCKER_SYNC == true ]] && {
+        $DEBSEC_SYNC == true || $SONION_SYNC == true || $DOCKER_SYNC == true ]] && {
         dmirror1="debmirror -a $DEBARCH --no-source --ignore-small-errors"
         dmirror1+=" --method=rsync --retry-rsync-packages=5 -p --rsync-options="
         dmirror2="debmirror -a $DEBARCH --no-source --ignore-small-errors"
@@ -308,7 +309,7 @@ ubuntu_sync() {
     # Sync ubuntu repository
     say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
         "${ubupre^}" "${ubucur^}" "$UBUNTUHOST"
-    $dmirror2 $ubuntuopts $UBUNTUREPO &>> $PROGFILE
+    $dmirror2 $ubuntuopts $UBUNTUREPO &>>$PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -324,7 +325,7 @@ debian_sync() {
     # Sync debian repository
     say 'Beginning sync of Debian %s and %s repositories from %s.' \
         "${debpre^}" "${debcur^}" "$DEBIANHOST"
-    $dmirror2 $debianopts $DEBIANREPO &>> $PROGFILE
+    $dmirror2 $debianopts $DEBIANREPO &>>$PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -340,7 +341,7 @@ debsec_sync() {
     # Sync debian security repository
     say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
         "${debpre^}" "${debcur^}" "$SMIRROR"
-    $dmirror2 $debsecopts $DEBSECREPO &>> $PROGFILE
+    $dmirror2 $debsecopts $DEBSECREPO &>>$PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -356,7 +357,7 @@ sonion_sync() {
     # Sync security onion repository
     say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
         "${ubupre^}" "${ubucur^}" "$SOMIRROR"
-    $dmirror2 $sonionopts $SONIONREPO &>> $PROGFILE
+    $dmirror2 $sonionopts $SONIONREPO &>>$PROGFILE
     say 'Done.\n'
 
     unset GNUPGHOME
@@ -373,24 +374,24 @@ docker_sync() {
 
     # TODO: Implement `wget_rsync` method instead of a regular clone
     [[ $CENTOS_SYNC == true ]] && {
-    say 'Beginning sync of Docker Centos %s repository from %s.' \
-        "${ubucur^}" "$DMIRROR"
-    $dockersync &>> $PROGFILE
-    say 'Done.\n'
+        say 'Beginning sync of Docker Centos %s repository from %s.' \
+            "${ubucur^}" "$DMIRROR"
+        $dockersync &>>$PROGFILE
+        say 'Done.\n'
     }
 
     [[ $UBUNTU_SYNC == true ]] && {
-    say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
-        "${ubupre^}" "${ubucur^}" "$DMIRROR"
-    $dmirror3 ${dockeroptsu} $DOCKERREPO/ubuntu &>> $PROGFILE
-    say 'Done.\n'
+        say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
+            "${ubupre^}" "${ubucur^}" "$DMIRROR"
+        $dmirror3 ${dockeroptsu} $DOCKERREPO/ubuntu &>>$PROGFILE
+        say 'Done.\n'
     }
 
     [[ $DEBIAN_SYNC == true ]] && {
-    say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
-        "${debpre^}" "${debcur^}" "$DMIRROR"
-    $dmirror3 ${dockeroptsd} $DOCKERREPO/debian &>> $PROGFILE
-    say 'Done.\n'
+        say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
+            "${debpre^}" "${debcur^}" "$DMIRROR"
+        $dmirror3 ${dockeroptsd} $DOCKERREPO/debian &>>$PROGFILE
+        say 'Done.\n'
     }
 
     unset GNUPGHOME
@@ -403,7 +404,7 @@ clamav_sync() {
 
     # Sync clamav repository
     say 'Beginning sync of ClamAV repository from %s.' "$CMIRROR"
-    $clamsync &>> $PROGFILE
+    $clamsync &>>$PROGFILE
     say 'Done.\n'
 
     return 0
@@ -413,21 +414,25 @@ ds_sync() {
     say 'Configured as downstream, so mirroring local upstream.'
 
     [[ -n $UMIRROR ]] || {
-        say err 'UMIRROR is empty or not set.'; exit 14; }
+        say err 'UMIRROR is empty or not set.'
+        exit 14
+    }
 
     # Build array of repos to sync downstream
-    [[ $CENTOS_SYNC == true ]] && PACKAGES+=( centos )
-    [[ $EPEL_SYNC   == true ]] && PACKAGES+=( fedora-epel )
-    [[ $UBUNTU_SYNC == true ]] && PACKAGES+=( ubuntu )
-    [[ $DEBIAN_SYNC == true ]] && PACKAGES+=( debian )
-    [[ $DEBSEC_SYNC == true ]] && PACKAGES+=( debian-security )
-    [[ $SONION_SYNC == true ]] && PACKAGES+=( securityonion )
-    [[ $DOCKER_SYNC == true ]] && PACKAGES+=( docker )
-    [[ $CLAMAV_SYNC == true ]] && PACKAGES+=( clamav )
-    [[ $LOCAL_SYNC  == true ]] && PACKAGES+=( local )
+    [[ $CENTOS_SYNC == true ]] && PACKAGES+=(centos)
+    [[ $EPEL_SYNC == true ]] && PACKAGES+=(fedora-epel)
+    [[ $UBUNTU_SYNC == true ]] && PACKAGES+=(ubuntu)
+    [[ $DEBIAN_SYNC == true ]] && PACKAGES+=(debian)
+    [[ $DEBSEC_SYNC == true ]] && PACKAGES+=(debian-security)
+    [[ $SONION_SYNC == true ]] && PACKAGES+=(securityonion)
+    [[ $DOCKER_SYNC == true ]] && PACKAGES+=(docker)
+    [[ $CLAMAV_SYNC == true ]] && PACKAGES+=(clamav)
+    [[ $LOCAL_SYNC == true ]] && PACKAGES+=(local)
 
     [[ -n ${PACKAGES[*]} ]] || {
-        say err 'No repos enabled for sync.'; exit 15; }
+        say err 'No repos enabled for sync.'
+        exit 15
+    }
 
     # For every enabled repo
     for repo in "${PACKAGES[@]}"; do
@@ -464,13 +469,13 @@ main() {
         exit 11
 
     # Check that we can reach the public mirror
-    elif ( [[ $UPSTREAM == true ]] && ! rsync ${MIRROR}:: &> /dev/null ) ||
-         ( [[ $UPSTREAM == false ]] && ! rsync ${UMIRROR}:: &> /dev/null ); then
+    elif ([[ $UPSTREAM == true ]] && ! rsync ${MIRROR}:: &>/dev/null) ||
+        ([[ $UPSTREAM == false ]] && ! rsync ${UMIRROR}:: &>/dev/null); then
         say err 'Cannot reach the %s mirror server.' "$MIRROR"
         exit 12
 
     # Check that the repository is mounted
-    elif ! mount | grep "$REPODIR" &> /dev/null; then
+    elif ! mount | grep "$REPODIR" &>/dev/null; then
         say err 'Directory %s is not mounted.' "$REPODIR"
         exit 13
 
@@ -486,14 +491,14 @@ main() {
 
             # Sync every enabled repo
             [[ $CENTOS_SYNC == true ]] && centos_sync
-            [[ $EPEL_SYNC   == true ]] && epel_sync
+            [[ $EPEL_SYNC == true ]] && epel_sync
             [[ $UBUNTU_SYNC == true ]] && ubuntu_sync
             [[ $DEBIAN_SYNC == true ]] && debian_sync
             [[ $DEBSEC_SYNC == true ]] && debsec_sync
             [[ $SONION_SYNC == true ]] && sonion_sync
             [[ $DOCKER_SYNC == true ]] && docker_sync
             [[ $CLAMAV_SYNC == true ]] && clamav_sync
-            [[ $LOCAL_SYNC  == true ]] && local_sync
+            [[ $LOCAL_SYNC == true ]] && local_sync
         else
             # Do a downstream sync
             UMIRROR=${UMIRROR:=$MIRROR} && ds_sync
@@ -517,4 +522,3 @@ main() {
 
 # Only execute if not being sourced
 [[ ${BASH_SOURCE[0]} == "$0" ]] && main "$@"
-
