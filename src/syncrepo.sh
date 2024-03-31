@@ -9,15 +9,17 @@ shopt -s extdebug
 # TODO: Implement support for RHEL based SecurityOnion
 # TODO: Implement Docker registry sync logic (also podman registry)
 # TODO: Fix upstream/downstream logic and detection (also variables)
+# TODO: Investigate storing all config in an associative array
 
 # Parse command line options
 syncrepo.parse_arguments() {
     declare -grx SR_META_AUTHOR='AfroThundr'
     declare -grx SR_META_BASENAME="${0##*/}"
-    declare -grx SR_META_MODIFIED='20240323'
+    declare -grx SR_META_MODIFIED='20240331'
     declare -grx SR_META_VERSION='1.8.0-rc11'
-    declare -grx SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu' 'Security Onion' 'Docker' 'ClamAV')
-    declare -grx SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
+    declare -agrx SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu'
+                                    'Security Onion' 'Docker' 'ClamAV')
+    declare -agrx SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
 
     [[ $# -gt 0 ]] || {
         utils.say -h 'No arguments specified, use -h for help.'
@@ -192,7 +194,7 @@ syncrepo.set_globals() {
     for var in $(set | awk -F= '/^SR_CFG_/ {print $1}'); do unset "$var"; done
     utils.call syncrepo.save_config
     # TODO: Remove SR_OPTS_TEE if we're only using it here
-    utils.say init "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_FULL" "${SR_OPTS_TEE[@]}"
+    utils.say -s "$SR_FILE_LOG_MAIN" "$SR_FILE_LOG_FULL" "${SR_OPTS_TEE[@]}"
     return 0
 }
 
@@ -202,7 +204,7 @@ syncrepo.load_config() {
     local file files=("${SR_META_CONFIG_MANUAL:-${SR_META_CONFIGS[@]}}")
     for file in "${files[@]}"; do
         [[ -s $file ]] && {
-            utils.say -h 'Reading configuration from: %s' "$file"
+            utils.say -n -i 'Reading configuration from: %s' "$file"
             source <(awk '
                 /^SR_CFG_/ && !/^SR_CFG_(BOOL|META)_/ {print $0}
             ' "$file")
@@ -216,10 +218,10 @@ syncrepo.save_config() {
     [[ ${SR_BOOL_SAVE_CONFIG:-} == true ]] && {
         local file=${SR_META_CONFIG_MANUAL:-${SR_META_CONFIGS[0]}}
         [[ -f $file && ! ${SR_BOOL_SAVE_CONFIG_FORCE:-} == true ]] && {
-            utils.say -h 'Config file %s exists, use -f to overwrite.' "$file"
+            utils.say -n -w 'Config file %s exists, use -f to overwrite.' "$file"
             exit 1
         }
-        utils.say -h 'Writing configuration to: %s' "$file"
+        utils.say -n -i 'Writing configuration to: %s' "$file"
         set | awk '
             /^SR_/ && !/^SR_(BOOL|META)_/ {gsub(/^SR_/,"SR_CFG_"); print $0}
         ' >"$file"
@@ -262,55 +264,56 @@ utils.set_array_variable() {
 
 # Debug wrapper to trace function calls
 utils.call() {
-    [[ $# -gt 0 ]] || return 1
-    local name=$1 && shift
-    call_count=${call_count:-2}
-    utils.say -d '%-*s enter %s' $((call_count++)) '->' "$name"
-    "$name" "$@"
-    utils.say -d '%-*s leave %s' $((--call_count)) '<-' "$name"
+    [[ $# -gt 0 ]] || return
+    declare -gi call_count=${call_count:-2}
+    printf '%-*s enter %s\n' $((call_count++)) '->' "$1"
+    "$@"
+    local return=$?
+    printf '%-*s leave %s\n' $((--call_count)) '<-' "$1"
+    return $return
 }
 
 # Log message and print to console
 # shellcheck disable=SC2059
 utils.say() {
-    [[ $# -gt 0 ]] || return 1
-    [[ $1 == -s || ${say_log_main:-} ]] ||
-        utils.say -s
+    [[ $# -gt 0 ]] || return
+    [[ $1 == -s || ${say_log_main:-} ]] || utils.say -s
     if [[ $1 == -s ]]; then
         export TERM=${TERM:-xterm}
-        say_log_main=${2:-/dev/null}
-        say_log_verb=${3:-/dev/null}
-        [[ $# -ge 4 ]] &&
-            say_tee=("${@:4}") ||
-            say_tee=(tee -a "$say_log_main" "$say_log_verb")
+        declare -g say_log_main=${2:-/dev/null}
+        declare -g say_log_verb=${3:-/dev/null}
+        declare -ag say_tee=(tee -a "$say_log_main" "$say_log_verb")
+        [[ $# -ge 4 ]] && declare -ag say_tee=("${@:4}")
     elif [[ $1 =~ -h|--help ]]; then
         local format=$2 && shift 2
         tput setaf 2
         printf "$format\\n" "$@"
     else
         local fd=1 log=true tag=''
-        local regex='^-((d|i|w|e)|-(debug|info|warn|error))$'
-        [[ ${QUIET:-} ]] && fd=/dev/null
+        local regex='^-((d|i|w|e|f)|-(debug|info|warn|error|fatal))$'
+        utils.check_bool_value "${QUIET:-}" && fd=/dev/null
         [[ $1 == -n ]] && log=false && shift
         [[ $1 == -T ]] && : >"$say_log_main" && shift
         [[ $1 == -t ]] && : >"$say_log_verb" && shift
         [[ $# -gt 0 ]] || return 0
         if [[ $1 =~ $regex ]]; then
-            [[ $1 =~ -d|--debug ]] && {
-                [[ ${DEBUG:-} ]] || return 0
+            if [[ $1 =~ -d|--debug ]]; then
+                utils.check_bool_value "${DEBUG:-}" || return 0
                 tag=DEBUG && tput setaf 6
-            }
-            [[ $1 =~ -i|--info ]] &&
+            elif [[ $1 =~ -i|--info ]]; then
                 tag=INFO && tput setaf 4
-            [[ $1 =~ -w|--warn ]] &&
+            elif [[ $1 =~ -w|--warn ]]; then
                 tag=WARN && tput setaf 3 && fd=2
-            [[ $1 =~ -e|--error ]] &&
+            elif [[ $1 =~ -e|--error ]]; then
                 tag=ERROR && tput setaf 1 && fd=2
+            elif [[ $1 =~ -f|--fatal ]]; then
+                tag=FATAL && tput setaf 9 && fd=2
+            fi
             local format="$tag: $2" && shift 2
         else
             local format="$1" && shift
         fi
-        [[ ${SILENT:-} ]] && fd=/dev/null
+        utils.check_bool_value "${SILENT:-}" && fd=/dev/null
         if [[ $log == true && $say_log_main != /dev/null ]]; then
             printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
                 "${say_tee[@]}" >&"$fd"
@@ -322,33 +325,37 @@ utils.say() {
     return 0
 }
 
-# Record time duration, concurrent timers
-utils.timer() {
-    [[ $# -gt 0 ]] || return 1
-    local index=0
-    [[ $1 =~ ^[0-9]+$ ]] && {
-        [[ ${timer_bookmark:=0} -ge $1 ]] || timer_bookmark=$1
-        index=$1 && shift
-    }
-    [[ $1 == -n ]] && ((timer_bookmark++))
-    [[ $1 == -p ]] && ((timer_bookmark--))
-    [[ $1 == -c ]] && index=${timer_bookmark:=0}
-    shift
-    [[ $# -gt 0 ]] || utils.say -n -e 'No timer action specified.'
-    [[ $1 == start ]] && timer_start[index]=$SECONDS
-    [[ $1 == stop ]] && {
-        [[ ${timer_start[index]:-} ]] ||
-            utils.say -n -e 'Timer %s not started.' "$index"
-        timer_start[index]=$SECONDS
-        timer_total[index]=$((timer_start[index] - timer_start[index]))
-    }
-    [[ $1 == show ]] && {
-        [[ ${timer_start[index]:-} ]] ||
-            timer_total[index]=$((SECONDS - timer_start[index]))
-        utils.say -h "${timer_total[index]}"
-    }
-    return 0
+# Record time duration, supports resume and reset
+utils.stopwatch() {
+    [[ $# -gt 0 ]] || return
+    declare -ig sw_start sw_stop sw_total
+    if [[ $1 == reset ]]; then
+        unset sw_start sw_stop sw_total
+    elif [[ $1 == start ]]; then
+        if [[ ${sw_start:-} ]]; then
+            [[ ${sw_stop:-} && $sw_start -lt $sw_stop ]] || return
+        fi
+        sw_start=$EPOCHSECONDS
+        sw_total+=0
+    elif [[ $1 == stop ]]; then
+        [[ ${sw_start:-} ]] || return
+        if [[ ${sw_stop:-} ]]; then
+            [[ $sw_start -gt $sw_stop ]] || return
+        fi
+        sw_stop=$EPOCHSECONDS
+        sw_total+=$((sw_stop - sw_start))
+    elif [[ $1 == show ]]; then
+        [[ ${sw_start:-} ]] || return
+        if [[ ${sw_stop:-} && $sw_stop -gt $sw_start ]]; then
+            printf '%d\n' "$sw_total"
+        else
+            printf '%d\n' $((sw_total + EPOCHSECONDS - sw_start))
+        fi
+    else
+        return 1
+    fi
 }
+
 
 # Use wget to sync remote and local directory
 # WIP: finish wget_rsync()
@@ -357,7 +364,7 @@ utils.wget_rsync() {
     local delete delta_add delta_remove local_dir local_files
     local dir_count remote_dir remote_files wget_mirror wget_spider
     [[ $1 == -d ]] && delete=true && shift
-    [[ $# -ge 2 ]] || utils.say -n -e 'Must supply remote and local directory.'
+    [[ $# -ge 2 ]] || return
     remote_dir=$1
     local_dir=$2
     # WIP: This can be done with one awk regex
@@ -413,7 +420,6 @@ utils.wget_rsync() {
 
 # Construct the sync environment
 syncrepo.build_vars() {
-    IFS=,
     # Declare more variables (CentOS/EPEL)
     [[ $SR_SYNC_CENTOS == true ||
         $SR_SYNC_EPEL == true ||
@@ -482,7 +488,7 @@ syncrepo.build_vars() {
             "$ubuntu_current_release"{,-backports,-updates,-proposed,-security}
             "$ubuntu_previous_release"{,-backports,-updates,-proposed,-security}
         )
-        ubuntu_sync_args=(
+        IFS=, declare -a ubuntu_sync_args=(
             -s "${ubuntu_components[*]}" -d "${ubuntu_repos[*]}"
             -h "$SR_MIRROR_PRIMARY" -r /ubuntu
         )
@@ -515,7 +521,7 @@ syncrepo.build_vars() {
             "$debian_current_release"{,-backports,-updates,-proposed-updates}
             "$debian_previous_release"{,-backports,-updates,-proposed-updates}
         )
-        debian_sync_args=(
+        IFS=, declare -a debian_sync_args=(
             -s "${debian_components[*]}" -d "${debian_repos[*]}"
             -h "$SR_MIRROR_PRIMARY" -r /debian
         )
@@ -523,7 +529,7 @@ syncrepo.build_vars() {
         debian_repos_security=(
             {$debian_current_release,$debian_previous_release}/updates
         )
-        debian_sync_args_security=(
+        IFS=, declare -a debian_sync_args_security=(
             -s "${debian_components[*]}" -d "${debian_repos_security[*]}"
             -h "$SR_MIRROR_DEBIAN_SECURITY" -r /
         )
@@ -563,7 +569,6 @@ syncrepo.build_vars() {
         )
     }
 
-    IFS=' '
     return 0
 }
 
@@ -615,11 +620,11 @@ syncrepo.sync_centos() {
         [[ -d $SR_REPO_CENTOS/$repo ]] || mkdir -p "$SR_REPO_CENTOS/$repo"
 
         # Sync current centos repository
-        utils.say 'Beginning sync of CentOS %s repository from %s.' \
+        utils.say -i 'Beginning sync of CentOS %s repository from %s.' \
             "$repo" "$SR_MIRROR_CENTOS"
         rsync "${SR_OPTS_RSYNC[@]}" "${rhel_filter_rsync[@]}" \
             "$SR_MIRROR_CENTOS/$repo/" "$SR_REPO_CENTOS/$repo/"
-        utils.say 'Done.\n'
+        utils.say -i 'Done.\n'
 
         # Create the symlink, or move, if necessary
         [[ -L ${repo%%.*} && $(readlink "${repo%%.*}") == "$repo" ]] ||
@@ -634,11 +639,11 @@ syncrepo.sync_centos() {
         # Check for point release placeholder
         [[ -f $SR_REPO_CENTOS/$repo/readme ]] || {
             # Sync previous centos repository
-            utils.say 'Beginning sync of CentOS %s repository from %s.' \
+            utils.say -i 'Beginning sync of CentOS %s repository from %s.' \
                 "$repo" "$SR_MIRROR_CENTOS"
             rsync "${SR_OPTS_RSYNC[@]}" "${rhel_filter_rsync[@]}" \
                 "$SR_MIRROR_CENTOS/$repo/" "$SR_REPO_CENTOS/$repo/"
-            utils.say 'Done.\n'
+            utils.say -i 'Done.\n'
         }
     done
 
@@ -652,11 +657,11 @@ syncrepo.sync_epel() {
         [[ -d $SR_REPO_EPEL/$repo ]] || mkdir -p "$SR_REPO_EPEL/$repo"
 
         # Sync epel repository
-        utils.say 'Beginning sync of EPEL %s repository from %s.' \
+        utils.say -i 'Beginning sync of EPEL %s repository from %s.' \
             "$repo" "$SR_MIRROR_EPEL"
         rsync "${SR_OPTS_RSYNC[@]}" "${epel_filter_rsync[@]}" \
             "$SR_MIRROR_EPEL/$repo/" "$SR_REPO_EPEL/$repo/"
-        utils.say 'Done.\n'
+        utils.say -i 'Done.\n'
     done
 
     return 0
@@ -669,11 +674,11 @@ syncrepo.sync_ubuntu() {
     [[ -d $SR_REPO_UBUNTU ]] || mkdir -p "$SR_REPO_UBUNTU"
 
     # Sync ubuntu repository
-    utils.say 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
+    utils.say -i 'Beginning sync of Ubuntu %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_UBUNTU"
     "${tool_args_debmirror2[@]}" "${ubuntu_sync_args[@]}" \
         "$SR_REPO_UBUNTU" &>>"$SR_FILE_LOG_FULL"
-    utils.say 'Done.\n'
+    utils.say -i 'Done.\n'
 
     unset GNUPGHOME
     return 0
@@ -686,11 +691,11 @@ syncrepo.sync_debian() {
     [[ -d $SR_REPO_DEBIAN ]] || mkdir -p "$SR_REPO_DEBIAN"
 
     # Sync debian repository
-    utils.say 'Beginning sync of Debian %s and %s repositories from %s.' \
+    utils.say -i 'Beginning sync of Debian %s and %s repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN"
     "${tool_args_debmirror2[@]}" "${debian_sync_args[@]}" \
         "$SR_REPO_DEBIAN" &>>"$SR_FILE_LOG_FULL"
-    utils.say 'Done.\n'
+    utils.say -i 'Done.\n'
 
     unset GNUPGHOME
     return 0
@@ -703,11 +708,11 @@ syncrepo.sync_debian_security() {
     [[ -d $SR_REPO_DEBIAN_SECURITY ]] || mkdir -p "$SR_REPO_DEBIAN_SECURITY"
 
     # Sync debian security repository
-    utils.say 'Beginning sync of Debian %s and %s Security repositories from %s.' \
+    utils.say -i 'Beginning sync of Debian %s and %s Security repositories from %s.' \
         "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DEBIAN_SECURITY"
     "${tool_args_debmirror2[@]}" "${debian_sync_args_security[@]}" \
         "$SR_REPO_DEBIAN_SECURITY" &>>"$SR_FILE_LOG_FULL"
-    utils.say 'Done.\n'
+    utils.say -i 'Done.\n'
 
     unset GNUPGHOME
     return 0
@@ -720,11 +725,11 @@ syncrepo.sync_securityonion() {
     [[ -d $SR_REPO_SECURITYONION ]] || mkdir -p "$SR_REPO_SECURITYONION"
 
     # Sync security onion repository
-    utils.say 'Beginning sync of Security Onion %s and %s repositories from %s.' \
+    utils.say -i 'Beginning sync of Security Onion %s and %s repositories from %s.' \
         "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_SECURITYONION"
     "${tool_args_debmirror2[@]}" "${securityonion_sync_args[@]}" \
         "$SR_REPO_SECURITYONION" &>>"$SR_FILE_LOG_FULL"
-    utils.say 'Done.\n'
+    utils.say -i 'Done.\n'
 
     unset GNUPGHOME
     return 0
@@ -740,26 +745,26 @@ syncrepo.sync_docker() {
     # TODO: Use wget_rsync() instead of a regular clone
 
     [[ $SR_SYNC_CENTOS == true ]] && {
-        utils.say 'Beginning sync of Docker Centos %s repository from %s.' \
+        utils.say -i 'Beginning sync of Docker Centos %s repository from %s.' \
             "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
         "${docker_sync_args[@]}" &>>"$SR_FILE_LOG_FULL"
-        utils.say 'Done.\n'
+        utils.say -i 'Done.\n'
     }
 
     [[ $SR_SYNC_UBUNTU == true ]] && {
-        utils.say 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
+        utils.say -i 'Beginning sync of Docker Ubuntu %s and %s repositories from %s.' \
             "${ubuntu_previous_release^}" "${ubuntu_current_release^}" "$SR_MIRROR_DOCKER"
         "${tool_args_debmirror3[@]}" "${docker_sync_args_ubuntu[@]}" \
             "$SR_REPO_DOCKER/ubuntu" &>>"$SR_FILE_LOG_FULL"
-        utils.say 'Done.\n'
+        utils.say -i 'Done.\n'
     }
 
     [[ $SR_SYNC_DEBIAN == true ]] && {
-        utils.say 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
+        utils.say -i 'Beginning sync of Docker Debian %s and %s repositories from %s.' \
             "${debian_previous_release^}" "${debian_current_release^}" "$SR_MIRROR_DOCKER"
         "${tool_args_debmirror3[@]}" "${docker_sync_args_debian[@]}" \
             "$SR_REPO_DOCKER/debian" &>>"$SR_FILE_LOG_FULL"
-        utils.say 'Done.\n'
+        utils.say -i 'Done.\n'
     }
 
     unset GNUPGHOME
@@ -772,16 +777,16 @@ syncrepo.sync_clamav() {
 
     # Sync clamav repository
     # TODO: Replace with wget_rsync()
-    utils.say 'Beginning sync of ClamAV repository from %s.' "$SR_MIRROR_CLAMAV"
+    utils.say -i 'Beginning sync of ClamAV repository from %s.' "$SR_MIRROR_CLAMAV"
     "${tool_args_clamavmirror[@]}" &>>"$SR_FILE_LOG_FULL"
-    utils.say 'Done.\n'
+    utils.say -i 'Done.\n'
 
     return 0
 }
 
 syncrepo.sync_downstream() {
     local repo package_list
-    utils.say 'Configured as downstream, so mirroring local upstream.'
+    utils.say -i 'Configured as downstream, so mirroring local upstream.'
 
     [[ $SR_MIRROR_UPSTREAM ]] || {
         utils.say -e 'SR_MIRROR_UPSTREAM is empty or not set.'
@@ -819,11 +824,11 @@ syncrepo.sync_downstream() {
         [[ -d $SR_REPO_PRIMARY/$repo ]] || mkdir -p "$SR_REPO_PRIMARY/$repo"
 
         # Sync the upstream repository
-        utils.say 'Beginning sync of %s repository from %s.' \
+        utils.say -i 'Beginning sync of %s repository from %s.' \
             "$repo" "$SR_MIRROR_UPSTREAM"
         rsync "${SR_OPTS_RSYNC[@]}" "${SR_MIRROR_UPSTREAM}::$repo/" \
             "$SR_REPO_PRIMARY/$repo/"
-        utils.say 'Done.\n'
+        utils.say -i 'Done.\n'
     done
 
     return 0
@@ -840,10 +845,10 @@ syncrepo.main() {
     # If evrything is good, begin the sync
     utils.call syncrepo.sanity_check && {
         utils.say -t 'Progress log reset.'
-        utils.say 'Started synchronization of repositories: %s' \
+        utils.say -i 'Started synchronization of repositories: %s' \
             "${SR_META_SOFTWARE[*]}"
-        utils.say 'Use tail -f %s to view progress.' "$SR_FILE_LOG_FULL"
-        utils.timer start
+        utils.say -i 'Use tail -f %s to view progress.' "$SR_FILE_LOG_FULL"
+        utils.stopwatch start
 
         # There can be only one...
         printf '%s\n' $$ >"$SR_FILE_LOCKFILE"
@@ -882,18 +887,18 @@ syncrepo.main() {
         fi
 
         # Fix ownership of files
-        utils.say 'Normalizing repository file permissions.'
+        utils.say -i 'Normalizing repository file permissions.'
         chown -R "$SR_REPO_CHOWN_UID:$SR_REPO_CHOWN_GID" "$SR_REPO_PRIMARY"
 
         # Clear the lockfile
         rm -f "$SR_FILE_LOCKFILE"
 
         # Now we're done
-        utils.timer stop
-        utils.say 'Completed synchronization of repositories: %s' \
+        utils.stopwatch stop
+        utils.say -i 'Completed synchronization of repositories: %s' \
             "${SR_META_SOFTWARE[*]}"
-        utils.say 'Total duration: %d seconds. Current repository size: %s.\n' \
-            "$(utils.timer show)" \
+        utils.say -i 'Total duration: %d seconds. Current repository size: %s.\n' \
+            "$(utils.stopwatch show)" \
             "$(du -hs "$SR_REPO_PRIMARY" | awk '{print $1}')"
     }
 
