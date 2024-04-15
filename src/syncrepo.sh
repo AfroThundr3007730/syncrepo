@@ -17,9 +17,9 @@ syncrepo.parse_arguments() {
     declare -grx SR_META_BASENAME="${0##*/}"
     declare -grx SR_META_MODIFIED='20240331'
     declare -grx SR_META_VERSION='1.8.0-rc11'
+    declare -agrx SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
     declare -agrx SR_META_SOFTWARE=('CentOS' 'EPEL' 'Debian' 'Ubuntu'
                                     'Security Onion' 'Docker' 'ClamAV')
-    declare -agrx SR_META_CONFIGS=(/etc/syncrepo{,/syncrepo}.conf)
 
     [[ $# -gt 0 ]] || {
         utils.say -h 'No arguments specified, use -h for help.'
@@ -266,10 +266,10 @@ utils.set_array_variable() {
 utils.call() {
     [[ $# -gt 0 ]] || return
     declare -gi call_count=${call_count:-2}
-    printf '%-*s enter %s\n' $((call_count++)) '->' "$1"
+    [[ ${DEBUG:-} ]] && printf '%-*s enter %s\n' $((call_count++)) '->' "$1"
     "$@"
     local return=$?
-    printf '%-*s leave %s\n' $((--call_count)) '<-' "$1"
+    [[ ${DEBUG:-} ]] && printf '%-*s leave %s\n' $((--call_count)) '<-' "$1"
     return $return
 }
 
@@ -291,14 +291,14 @@ utils.say() {
     else
         local fd=1 log=true tag=''
         local regex='^-((d|i|w|e|f)|-(debug|info|warn|error|fatal))$'
-        utils.check_bool_value "${QUIET:-}" && fd=/dev/null
+        [[ ${QUIET:-} ]] && fd=/dev/null
         [[ $1 == -n ]] && log=false && shift
         [[ $1 == -T ]] && : >"$say_log_main" && shift
         [[ $1 == -t ]] && : >"$say_log_verb" && shift
         [[ $# -gt 0 ]] || return 0
         if [[ $1 =~ $regex ]]; then
             if [[ $1 =~ -d|--debug ]]; then
-                utils.check_bool_value "${DEBUG:-}" || return 0
+                [[ ${DEBUG:-} ]] || return 0
                 tag=DEBUG && tput setaf 6
             elif [[ $1 =~ -i|--info ]]; then
                 tag=INFO && tput setaf 4
@@ -313,7 +313,7 @@ utils.say() {
         else
             local format="$1" && shift
         fi
-        utils.check_bool_value "${SILENT:-}" && fd=/dev/null
+        [[ ${SILENT:-} ]] && fd=/dev/null
         if [[ $log == true && $say_log_main != /dev/null ]]; then
             printf "%s: $format\\n" "$(date -u +%FT%TZ)" "$@" |
                 "${say_tee[@]}" >&"$fd"
@@ -603,6 +603,7 @@ syncrepo.sanity_check() {
     }
 
     # Check that the repository is mounted
+    # TODO: replace this with `mountpoint` or something
     mount | grep "$SR_REPO_PRIMARY" &>/dev/null || {
         utils.say -e 'Directory %s is not mounted.' "$SR_REPO_PRIMARY"
         exit 1
@@ -845,7 +846,7 @@ syncrepo.main() {
     # If evrything is good, begin the sync
     utils.call syncrepo.sanity_check && {
         utils.say -t 'Progress log reset.'
-        utils.say -i 'Started synchronization of repositories: %s' \
+        IFS=, utils.say -i 'Started synchronization of repositories: %s' \
             "${SR_META_SOFTWARE[*]}"
         utils.say -i 'Use tail -f %s to view progress.' "$SR_FILE_LOG_FULL"
         utils.stopwatch start
@@ -895,7 +896,7 @@ syncrepo.main() {
 
         # Now we're done
         utils.stopwatch stop
-        utils.say -i 'Completed synchronization of repositories: %s' \
+        IFS=, utils.say -i 'Completed synchronization of repositories: %s' \
             "${SR_META_SOFTWARE[*]}"
         utils.say -i 'Total duration: %d seconds. Current repository size: %s.\n' \
             "$(utils.stopwatch show)" \
