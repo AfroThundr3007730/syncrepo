@@ -473,6 +473,7 @@ syncrepo.build_vars() {
         $SR_SYNC_SECURITYONION == true ||
         $SR_SYNC_DOCKER == true ]] && {
 
+        # TODO: Maybe also preserve version number for symlinks
         mapfile -t ubuntu_all_releases <<<"$(
             curl -sL "$SR_MIRROR_PRIMARY/ubuntu-releases/HEADER.html" |
                 awk -F '(' '
@@ -509,6 +510,8 @@ syncrepo.build_vars() {
         $SR_SYNC_DEBIAN_SECURITY == true ||
         $SR_SYNC_DOCKER == true ]] && {
 
+        # TODO: Needs to account for three releases being up at the same time
+        #   (e.g bullseye,bookworm not buster,bullseye)
         mapfile -t debian_all_releases <<<"$(
             curl -sL "$SR_MIRROR_PRIMARY/debian/README.html" |
                 awk -F '[<> ]' '/<dt>/ && /Debian/ {print $9}'
